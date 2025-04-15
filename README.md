@@ -1,4 +1,4 @@
-# Entity Extractor and Linker
+# Entity Extractor
 
 Entity Extractor ist ein leistungsstarkes Tool zur Erkennung, Extraktion und Anreicherung von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität.
 
@@ -21,9 +21,9 @@ pip install -r requirements.txt
 
 Der Entity Extractor arbeitet in mehreren Schritten:
 
-1. **Entitätserkennung**: Verwendet OpenAI-LLMs (wie GPT-4o-mini), um Entitäten im Text zu identifizieren, ihren Typ zu bestimmen und Zitate zu extrahieren.
+1. **Entitätserkennung**: Verwendet OpenAI-LLMs (wie GPT-4.1-mini), um Entitäten im Text zu identifizieren, ihren Typ zu bestimmen und Zitate zu extrahieren.
 2. **Wikipedia-Integration**: Verknüpft erkannte Entitäten mit passenden Wikipedia-Artikeln und extrahiert Zusammenfassungen.
-3. **Wikidata-Anreicherung**: Holt Wikidata-IDs, Beschreibungen und Typen für die erkannten Entitäten.
+3. **Wikidata-Integration**: Holt Wikidata-IDs, Beschreibungen und Typen für die erkannten Entitäten.
 4. **DBpedia-Integration**: Verbindet zu DBpedia, um zusätzliche strukturierte Informationen zu erhalten.
 5. **Sprachübergreifende Verarbeitung**: Unterstützt sowohl deutsche als auch englische Ausgaben und kann zwischen Sprachversionen von Artikeln wechseln.
 
@@ -34,11 +34,11 @@ Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt:
 ```python
 config = {
     "USE_WIKIPEDIA": True,     # Immer True, Wikipedia ist Pflicht
-    "USE_WIKIDATA": True,      # Wikidata verwenden
-    "USE_DBPEDIA": True,       # DBpedia verwenden
-    "DBPEDIA_USE_DE": True,    # Deutsche DBpedia-Server verwenden
+    "USE_WIKIDATA": True,      # Wikidata verwenden (Standard: True)
+    "USE_DBPEDIA": False,      # DBpedia verwenden (Standard: False)
+    "DBPEDIA_USE_DE": False,   # Deutsche DBpedia-Server verwenden (Standard: False)
     "DBPEDIA_TIMEOUT": 15,     # Timeout in Sekunden für DBpedia-Anfragen
-    "MODEL": "gpt-4o-mini",    # LLM-Modell für die Entitätsextraktion
+    "MODEL": "gpt-4.1-mini",   # LLM-Modell für die Entitätsextraktion
     "OPENAI_API_KEY": None,    # None = Aus Umgebungsvariable laden
     "LANGUAGE": "de",          # Deutsche (de) oder Englische (en) Ausgabesprache
     "SHOW_STATUS": True,       # Status-/Logging-Meldungen anzeigen
@@ -52,10 +52,10 @@ config = {
 
 ```python
 import json
-from nernel import link_entities_to_wikidata
+from nernel import link_entities
 
 text = "Apple und Microsoft sind große Technologieunternehmen."
-entities = link_entities_to_wikidata(text)
+entities = link_entities(text)
 print(json.dumps(entities, ensure_ascii=False, indent=2))
 ```
 
@@ -63,16 +63,16 @@ print(json.dumps(entities, ensure_ascii=False, indent=2))
 
 ```python
 import json
-from nernel import link_entities_to_wikidata
+from nernel import link_entities
 
 text = "Albert Einstein war ein theoretischer Physiker."
 config = {
     "LANGUAGE": "en",          # Englische Ausgabe
-    "MODEL": "gpt-4o",         # Alternatives Modell verwenden
+    "MODEL": "gpt-4.1-mini",   # Alternatives Modell verwenden
     "SHOW_STATUS": False,      # Logging-Ausgaben unterdrücken
     "DBPEDIA_TIMEOUT": 30      # Längeres Timeout für DBpedia
 }
-entities = link_entities_to_wikidata(text, config=config)
+entities = link_entities(text, config=config)
 print(json.dumps(entities, ensure_ascii=False, indent=2))
 ```
 
@@ -147,7 +147,7 @@ Ein typischer JSON-Output sieht wie folgt aus:
 
 3. **Leistungsoptimierung**:
    - Für schnellere Antworten können Sie `USE_DBPEDIA: False` setzen
-   - Für bessere Entitätserkennung verwenden Sie leistungsfähigere Modelle wie `MODEL: "gpt-4o"`
+   - Für bessere Entitätserkennung verwenden Sie leistungsfähigere Modelle wie `MODEL: "gpt-4.1"`
 
 4. **Logging**:
    - Für stille Ausführung setzen Sie `SHOW_STATUS: False`

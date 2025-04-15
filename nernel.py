@@ -684,7 +684,7 @@ def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
 ##############################################################################
 # Hauptfunktion: Verknüpft erkannte Entitäten mit Wikidata
 ##############################################################################
-def link_entities_to_wikidata(text, config=None):
+def link_entities(text, config=None):
     # Bei Bedarf Standardkonfiguration verwenden
     if config is None:
         config = DEFAULT_CONFIG
@@ -720,6 +720,9 @@ def link_entities_to_wikidata(text, config=None):
         wikipedia_url = entity_info.get("wikipedia_url")
         entity_type = entity_info.get("entity_type", "")
         citation = entity_info.get("citation", "")
+        
+        # Für jede neue Entität den Wikipedia-Extract zurücksetzen
+        wikipedia_extract = None
         
         # Leere Ergebnisse überspringen
         if not entity_name or not wikipedia_url:
@@ -780,7 +783,7 @@ def link_entities_to_wikidata(text, config=None):
                 entity_id = get_wikidata_id_from_wikipedia_url(wikipedia_url)
                 
         # Wikipedia-Extrakt abrufen (falls noch nicht geschehen)
-        if 'wikipedia_extract' not in locals() or wikipedia_extract is None:
+        if wikipedia_extract is None:
             wikipedia_extract = get_wikipedia_extract(wikipedia_url)
         
         entity_result["sources"]["wikipedia"] = {
@@ -842,13 +845,13 @@ if __name__ == "__main__":
         "USE_DBPEDIA": True,       # DBpedia verwenden
         "DBPEDIA_USE_DE": True,    # Deutsche DBpedia-Server verwenden
         "DBPEDIA_TIMEOUT": 15,     # Timeout in Sekunden für DBpedia-Anfragen
-        "MODEL": "gpt-4o-mini",    # LLM-Modell für die Entitätsextraktion
+        "MODEL": "gpt-4.1-mini",    # LLM-Modell für die Entitätsextraktion
         "OPENAI_API_KEY": None,    # None = Aus Umgebungsvariable laden
         "LANGUAGE": "en",          # Deutsche (de) oder Englische (en) Ausgabesprache
         "SHOW_STATUS": True,       # Status-/Logging-Meldungen anzeigen
         "SUPPRESS_TLS_WARNINGS": True  # TLS-Warnungen von urllib3 unterdrücken
     }
       
-    entities = link_entities_to_wikidata(example_text, config=config)
+    entities = link_entities(example_text, config=config)
     print("\nJSON-Output (formatiert):")
     print(json.dumps(entities, ensure_ascii=False, indent=2))
