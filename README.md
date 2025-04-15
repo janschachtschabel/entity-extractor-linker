@@ -1,4 +1,4 @@
-# Entity Extractor
+# Entity Extractor and Linker
 
 Entity Extractor ist ein leistungsstarkes Tool zur Erkennung, Extraktion und Anreicherung von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität.
 
