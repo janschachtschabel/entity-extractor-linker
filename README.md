@@ -1,6 +1,6 @@
 # Entity Extractor and Linker (LLM based)
 
-Entity Extractor ist ein leistungsstarkes Tool zur Erkennung, Extraktion und Anreicherung von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität.
+Entity Extractor and Linker ist ein leistungsstarkes Tool zur Erkennung, Extraktion und Anreicherung von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität.
 
 ## Installation
 
@@ -26,6 +26,7 @@ Der Entity Extractor arbeitet in mehreren Schritten:
 3. **Wikidata-Integration**: Holt Wikidata-IDs, Beschreibungen und Typen für die erkannten Entitäten.
 4. **DBpedia-Integration**: Verbindet zu DBpedia, um zusätzliche strukturierte Informationen zu erhalten.
 5. **Sprachübergreifende Verarbeitung**: Unterstützt sowohl deutsche als auch englische Ausgaben und kann zwischen Sprachversionen von Artikeln wechseln.
+6. **Trainingsdatensammlung**: Kann optional korrigierte Entitätsdaten im JSONL-Format für OpenAI-Finetuning sammeln.
 
 ## Konfiguration
 
@@ -42,7 +43,9 @@ config = {
     "OPENAI_API_KEY": None,    # None = Aus Umgebungsvariable laden
     "LANGUAGE": "de",          # Deutsche (de) oder Englische (en) Ausgabesprache
     "SHOW_STATUS": True,       # Status-/Logging-Meldungen anzeigen
-    "SUPPRESS_TLS_WARNINGS": True  # TLS-Warnungen von urllib3 unterdrücken
+    "SUPPRESS_TLS_WARNINGS": True,  # TLS-Warnungen von urllib3 unterdrücken
+    "COLLECT_TRAINING_DATA": False,  # Trainingsdaten für Finetuning sammeln
+    "TRAINING_DATA_PATH": "entity_extractor_training_data.jsonl"  # Pfad zur JSONL-Datei für Trainingsdaten
 }
 ```
 
@@ -70,7 +73,9 @@ config = {
     "LANGUAGE": "en",          # Englische Ausgabe
     "MODEL": "gpt-4.1-mini",   # Alternatives Modell verwenden
     "SHOW_STATUS": False,      # Logging-Ausgaben unterdrücken
-    "DBPEDIA_TIMEOUT": 30      # Längeres Timeout für DBpedia
+    "DBPEDIA_TIMEOUT": 30,     # Längeres Timeout für DBpedia
+    "COLLECT_TRAINING_DATA": True,  # Trainingsdaten sammeln
+    "TRAINING_DATA_PATH": "custom_training_data.jsonl"  # Benutzerdefinierter Pfad für Trainingsdaten
 }
 entities = link_entities(text, config=config)
 print(json.dumps(entities, ensure_ascii=False, indent=2))
@@ -152,6 +157,12 @@ Ein typischer JSON-Output sieht wie folgt aus:
 4. **Logging**:
    - Für stille Ausführung setzen Sie `SHOW_STATUS: False`
    - Um Details zur Verarbeitung zu sehen, setzen Sie `SHOW_STATUS: True`
+
+5. **Trainingsdatensammlung**:
+   - Aktivieren Sie `COLLECT_TRAINING_DATA: True`, um Trainingsdaten zu sammeln
+   - Die Daten werden im OpenAI-Finetuning-JSONL-Format gespeichert
+   - Der Speicherort kann über `TRAINING_DATA_PATH` angepasst werden
+   - Die gesammelten Daten können direkt für das Finetuning eigener OpenAI-Modelle verwendet werden
 
 ## Hinweise
 

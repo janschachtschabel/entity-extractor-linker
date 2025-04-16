@@ -22,7 +22,9 @@ def main():
         "OPENAI_API_KEY": None,    # None = Aus Umgebungsvariable laden
         "LANGUAGE": "en",          # Englische Ausgabesprache
         "SHOW_STATUS": True,       # Status-/Logging-Meldungen anzeigen
-        "SUPPRESS_TLS_WARNINGS": True  # TLS-Warnungen von urllib3 unterdrücken
+        "SUPPRESS_TLS_WARNINGS": True,  # TLS-Warnungen von urllib3 unterdrücken
+        "COLLECT_TRAINING_DATA": False,  # Trainingsdaten für Finetuning sammeln
+        "TRAINING_DATA_PATH": "entity_extractor_training_data.jsonl"  # Pfad zur JSONL-Datei für Trainingsdaten
     }
     
     # Entitäten extrahieren
