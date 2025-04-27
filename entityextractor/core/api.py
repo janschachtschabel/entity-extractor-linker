@@ -84,12 +84,21 @@ def process_entities(input_text, user_config=None):
                 rel_map[k] = rel
         deduped_relationships = list(rel_map.values())
         logging.info(f"Beziehungen gesamt: {len(all_relationships)}, eindeutig: {len(deduped_relationships)}")
+        # LLM-basierte Deduplizierung nach dem Chunking
+        from entityextractor.core.deduplication_utils import deduplicate_relationships_llm
+        logging.info("Starte finale LLM-Deduplizierung der Beziehungen nach Chunking...")
+        deduped_relationships_final = deduplicate_relationships_llm(deduped_relationships, deduped_entities, config)
+        logging.info(f"Beziehungen nach LLM-Deduplizierung: {len(deduped_relationships_final)} (vorher: {len(deduped_relationships)})")
+        # Fuzzy/Semantik-Deduplizierung
+        from entityextractor.core.semantic_dedup_utils import filter_semantically_similar_relationships
+        deduped_relationships_final2 = filter_semantically_similar_relationships(deduped_relationships_final, similarity_threshold=0.85)
+        logging.info(f"Beziehungen nach semantischer Deduplizierung: {len(deduped_relationships_final2)} (vorher: {len(deduped_relationships_final)})")
+        deduped_relationships = deduped_relationships_final2
         # Knowledge Graph Completion
         if config.get("ENABLE_KGC", False):
             rounds = config.get("KGC_ROUNDS", 3)
             logging.info(f"Starte Knowledge Graph Completion-Inferenz mit {rounds} Runden")
-            # Beginne mit bisherigen deduplizierten Beziehungen
-            existing_rel_map = rel_map.copy()
+            existing_rel_map = {(r["subject"], r["predicate"], r["object"]): r for r in deduped_relationships}
             existing_rels_list = list(existing_rel_map.values())
             for round_idx in range(1, rounds + 1):
                 logging.info(f"KGC-Runde {round_idx}/{rounds} beginnt mit {len(existing_rels_list)} bestehenden Beziehungen")
@@ -105,7 +114,19 @@ def process_entities(input_text, user_config=None):
                     if key not in existing_rel_map:
                         existing_rel_map[key] = rel
                 existing_rels_list = list(existing_rel_map.values())
-            deduped_relationships = existing_rels_list
+            # 1. Schnelle Filterung identischer Tripel (S,P,O)
+            tripel_map = {(r["subject"], r["predicate"], r["object"]): r for r in existing_rel_map.values()}
+            deduped_relationships = list(tripel_map.values())
+            logging.info(f"Beziehungen nach exakter Tripel-Deduplizierung (nach KGC): {len(deduped_relationships)}")
+            # 2. LLM-Deduplizierung
+            from entityextractor.core.deduplication_utils import deduplicate_relationships_llm
+            deduped_relationships_final = deduplicate_relationships_llm(deduped_relationships, deduped_entities, config)
+            logging.info(f"Beziehungen nach LLM-Deduplizierung (nach KGC): {len(deduped_relationships_final)} (vorher: {len(deduped_relationships)})")
+            # 3. Fuzzy/Semantik-Deduplizierung
+            from entityextractor.core.semantic_dedup_utils import filter_semantically_similar_relationships
+            deduped_relationships_final2 = filter_semantically_similar_relationships(deduped_relationships_final, similarity_threshold=0.85)
+            logging.info(f"Beziehungen nach semantischer Deduplizierung (nach KGC): {len(deduped_relationships_final2)} (vorher: {len(deduped_relationships_final)})")
+            deduped_relationships = deduped_relationships_final2
             logging.info(f"KGC abgeschlossen: {len(deduped_relationships)} Relationen insgesamt")
         # Ergebnis zurückgeben
         result_dict = {"entities": deduped_entities, "relationships": deduped_relationships}
@@ -184,6 +205,13 @@ def process_entities(input_text, user_config=None):
             }
             if "wikipedia_extract" in entity:
                 legacy_entity["sources"]["wikipedia"]["extract"] = entity.get("wikipedia_extract", "")
+            # Always include Wikipedia categories
+            if "wikipedia_categories" in entity:
+                legacy_entity["sources"]["wikipedia"]["categories"] = entity.get("wikipedia_categories", [])
+            # Add additional Wikipedia details if ADDITIONAL_DETAILS enabled
+            if "wikipedia_details" in entity and entity["wikipedia_details"]:
+                for key, value in entity["wikipedia_details"].items():
+                    legacy_entity["sources"]["wikipedia"][key] = value
         
         # Add Wikidata source if available
         if "wikidata_id" in entity:
@@ -243,6 +271,16 @@ def process_entities(input_text, user_config=None):
                 legacy_entity["sources"]["wikidata"]["instance_of"] = entity.get("instance_of", [])
             if "subclass_of" in entity:
                 legacy_entity["sources"]["wikidata"]["subclass_of"] = entity.get("subclass_of", [])
+            if "part_of" in entity:
+                legacy_entity["sources"]["wikidata"]["part_of"] = entity.get("part_of", [])
+            if "has_parts" in entity:
+                legacy_entity["sources"]["wikidata"]["has_parts"] = entity.get("has_parts", [])
+            if "member_of" in entity:
+                legacy_entity["sources"]["wikidata"]["member_of"] = entity.get("member_of", [])
+            if "gnd_id" in entity:
+                legacy_entity["sources"]["wikidata"]["gnd_id"] = entity.get("gnd_id", "")
+            if "isni" in entity:
+                legacy_entity["sources"]["wikidata"]["isni"] = entity.get("isni", "")
             if "official_name" in entity:
                 legacy_entity["sources"]["wikidata"]["official_name"] = entity.get("official_name", "")
             if "citizenship" in entity:
@@ -260,7 +298,7 @@ def process_entities(input_text, user_config=None):
             if "population" in entity:
                 legacy_entity["sources"]["wikidata"]["population"] = entity.get("population", "")
         
-        # Add DBpedia source if available
+        # Add DBpedia source if available, split base vs detail
         if "dbpedia_info" in entity and entity["dbpedia_info"]:
             dbpedia_info = entity["dbpedia_info"]
             legacy_entity["sources"]["dbpedia"] = {
@@ -268,86 +306,78 @@ def process_entities(input_text, user_config=None):
                 "endpoint": dbpedia_info.get("endpoint", ""),
                 "language": dbpedia_info.get("language", "")
             }
-            
-            # Add title from either dbpedia_title or title field
+            # Base DBpedia fields (always)
             if "dbpedia_title" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["title"] = dbpedia_info.get("dbpedia_title", "")
             elif "title" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["title"] = dbpedia_info.get("title", "")
-            
-            # Basic information
             if "abstract" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["abstract"] = dbpedia_info.get("abstract", "")
             if "label" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["label"] = dbpedia_info.get("label", "")
             if "types" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["types"] = dbpedia_info.get("types", [])
-            if "comment" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["comment"] = dbpedia_info.get("comment", "")
             if "same_as" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["same_as"] = dbpedia_info.get("same_as", [])
-                
-            # Web presence
-            if "homepage" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["homepage"] = dbpedia_info.get("homepage", "")
-            if "thumbnail" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["thumbnail"] = dbpedia_info.get("thumbnail", "")
-            if "depiction" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["depiction"] = dbpedia_info.get("depiction", "")
-                
-            # Geo information
-            if "lat" in dbpedia_info and "long" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["coordinates"] = {
-                    "latitude": dbpedia_info.get("lat", ""),
-                    "longitude": dbpedia_info.get("long", "")
-                }
-                
-            # Categories and subjects
             if "subject" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["subjects"] = dbpedia_info.get("subject", [])
             elif "subjects" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["subjects"] = dbpedia_info.get("subjects", [])
-                
+            if "part_of" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["part_of"] = dbpedia_info.get("part_of", [])
+            if "has_parts" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["has_parts"] = dbpedia_info.get("has_parts", [])
+            if "member_of" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["member_of"] = dbpedia_info.get("member_of", [])
             if "category" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["categories"] = dbpedia_info.get("category", [])
             elif "categories" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["categories"] = dbpedia_info.get("categories", [])
-                
-            # Add person-specific information
-            if "birth_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["birth_date"] = dbpedia_info.get("birth_date", "")
-                
-            if "death_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["death_date"] = dbpedia_info.get("death_date", "")
-                
-            if "birth_place" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["birth_place"] = dbpedia_info.get("birth_place", "")
-                
-            if "death_place" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["death_place"] = dbpedia_info.get("death_place", "")
-                
-            # Add location-specific information
-            if "population" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["population"] = dbpedia_info.get("population", "")
-                
-            if "area" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["area"] = dbpedia_info.get("area", "")
-                
-            if "country" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["country"] = dbpedia_info.get("country", "")
-                
-            if "region" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["region"] = dbpedia_info.get("region", "")
-                
-            # Add organization-specific information
-            if "founding_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["founding_date"] = dbpedia_info.get("founding_date", "")
-                
-            if "founder" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["founder"] = dbpedia_info.get("founder", "")
-                
-            if "parent_company" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["parent_company"] = dbpedia_info.get("parent_company", "")
+            # Detail-only DBpedia fields (if ADDITIONAL_DETAILS enabled)
+            if config.get("ADDITIONAL_DETAILS", False):
+                if "comment" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["comment"] = dbpedia_info.get("comment", "")
+                if "homepage" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["homepage"] = dbpedia_info.get("homepage", "")
+                if "thumbnail" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["thumbnail"] = dbpedia_info.get("thumbnail", "")
+                if "depiction" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["depiction"] = dbpedia_info.get("depiction", "")
+                if "lat" in dbpedia_info and "long" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["coordinates"] = {
+                        "latitude": dbpedia_info.get("lat", ""),
+                        "longitude": dbpedia_info.get("long", "")
+                    }
+                if "birth_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["birth_date"] = dbpedia_info.get("birth_date", "")
+                if "death_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["death_date"] = dbpedia_info.get("death_date", "")
+                if "birth_place" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["birth_place"] = dbpedia_info.get("birth_place", "")
+                if "death_place" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["death_place"] = dbpedia_info.get("death_place", "")
+                if "population" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["population"] = dbpedia_info.get("population", "")
+                if "area" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["area"] = dbpedia_info.get("area", "")
+                if "country" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["country"] = dbpedia_info.get("country", "")
+                if "region" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["region"] = dbpedia_info.get("region", "")
+                if "founding_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["founding_date"] = dbpedia_info.get("founding_date", "")
+                if "founder" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["founder"] = dbpedia_info.get("founder", "")
+                if "parent_company" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["parent_company"] = dbpedia_info.get("parent_company", "")
+                if "current_member" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["current_member"] = dbpedia_info.get("current_member", [])
+                if "former_member" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["former_member"] = dbpedia_info.get("former_member", [])
+                if "dbp_part_of" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["dbp_part_of"] = dbpedia_info.get("dbp_part_of", [])
+                if "dbp_member_of" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["dbp_member_of"] = dbpedia_info.get("dbp_member_of", [])
         
         result.append(legacy_entity)
     
@@ -465,6 +495,13 @@ def process_entities(input_text, user_config=None):
             }
             if "wikipedia_extract" in entity:
                 legacy_entity["sources"]["wikipedia"]["extract"] = entity.get("wikipedia_extract", "")
+            # Always include Wikipedia categories
+            if "wikipedia_categories" in entity:
+                legacy_entity["sources"]["wikipedia"]["categories"] = entity.get("wikipedia_categories", [])
+            # Add additional Wikipedia details if ADDITIONAL_DETAILS enabled
+            if "wikipedia_details" in entity and entity["wikipedia_details"]:
+                for key, value in entity["wikipedia_details"].items():
+                    legacy_entity["sources"]["wikipedia"][key] = value
         
         # Add Wikidata source if available
         if "wikidata_id" in entity:
@@ -524,6 +561,16 @@ def process_entities(input_text, user_config=None):
                 legacy_entity["sources"]["wikidata"]["instance_of"] = entity.get("instance_of", [])
             if "subclass_of" in entity:
                 legacy_entity["sources"]["wikidata"]["subclass_of"] = entity.get("subclass_of", [])
+            if "part_of" in entity:
+                legacy_entity["sources"]["wikidata"]["part_of"] = entity.get("part_of", [])
+            if "has_parts" in entity:
+                legacy_entity["sources"]["wikidata"]["has_parts"] = entity.get("has_parts", [])
+            if "member_of" in entity:
+                legacy_entity["sources"]["wikidata"]["member_of"] = entity.get("member_of", [])
+            if "gnd_id" in entity:
+                legacy_entity["sources"]["wikidata"]["gnd_id"] = entity.get("gnd_id", "")
+            if "isni" in entity:
+                legacy_entity["sources"]["wikidata"]["isni"] = entity.get("isni", "")
             if "official_name" in entity:
                 legacy_entity["sources"]["wikidata"]["official_name"] = entity.get("official_name", "")
             if "citizenship" in entity:
@@ -541,7 +588,7 @@ def process_entities(input_text, user_config=None):
             if "population" in entity:
                 legacy_entity["sources"]["wikidata"]["population"] = entity.get("population", "")
         
-        # Add DBpedia source if available
+        # Add DBpedia source if available, split base vs detail
         if "dbpedia_info" in entity and entity["dbpedia_info"]:
             dbpedia_info = entity["dbpedia_info"]
             legacy_entity["sources"]["dbpedia"] = {
@@ -549,86 +596,78 @@ def process_entities(input_text, user_config=None):
                 "endpoint": dbpedia_info.get("endpoint", ""),
                 "language": dbpedia_info.get("language", "")
             }
-            
-            # Add title from either dbpedia_title or title field
+            # Base DBpedia fields (always)
             if "dbpedia_title" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["title"] = dbpedia_info.get("dbpedia_title", "")
             elif "title" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["title"] = dbpedia_info.get("title", "")
-            
-            # Basic information
             if "abstract" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["abstract"] = dbpedia_info.get("abstract", "")
             if "label" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["label"] = dbpedia_info.get("label", "")
             if "types" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["types"] = dbpedia_info.get("types", [])
-            if "comment" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["comment"] = dbpedia_info.get("comment", "")
             if "same_as" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["same_as"] = dbpedia_info.get("same_as", [])
-                
-            # Web presence
-            if "homepage" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["homepage"] = dbpedia_info.get("homepage", "")
-            if "thumbnail" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["thumbnail"] = dbpedia_info.get("thumbnail", "")
-            if "depiction" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["depiction"] = dbpedia_info.get("depiction", "")
-                
-            # Geo information
-            if "lat" in dbpedia_info and "long" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["coordinates"] = {
-                    "latitude": dbpedia_info.get("lat", ""),
-                    "longitude": dbpedia_info.get("long", "")
-                }
-                
-            # Categories and subjects
             if "subject" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["subjects"] = dbpedia_info.get("subject", [])
             elif "subjects" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["subjects"] = dbpedia_info.get("subjects", [])
-                
+            if "part_of" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["part_of"] = dbpedia_info.get("part_of", [])
+            if "has_parts" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["has_parts"] = dbpedia_info.get("has_parts", [])
+            if "member_of" in dbpedia_info:
+                legacy_entity["sources"]["dbpedia"]["member_of"] = dbpedia_info.get("member_of", [])
             if "category" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["categories"] = dbpedia_info.get("category", [])
             elif "categories" in dbpedia_info:
                 legacy_entity["sources"]["dbpedia"]["categories"] = dbpedia_info.get("categories", [])
-                
-            # Add person-specific information
-            if "birth_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["birth_date"] = dbpedia_info.get("birth_date", "")
-                
-            if "death_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["death_date"] = dbpedia_info.get("death_date", "")
-                
-            if "birth_place" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["birth_place"] = dbpedia_info.get("birth_place", "")
-                
-            if "death_place" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["death_place"] = dbpedia_info.get("death_place", "")
-                
-            # Add location-specific information
-            if "population" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["population"] = dbpedia_info.get("population", "")
-                
-            if "area" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["area"] = dbpedia_info.get("area", "")
-                
-            if "country" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["country"] = dbpedia_info.get("country", "")
-                
-            if "region" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["region"] = dbpedia_info.get("region", "")
-                
-            # Add organization-specific information
-            if "founding_date" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["founding_date"] = dbpedia_info.get("founding_date", "")
-                
-            if "founder" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["founder"] = dbpedia_info.get("founder", "")
-                
-            if "parent_company" in dbpedia_info:
-                legacy_entity["sources"]["dbpedia"]["parent_company"] = dbpedia_info.get("parent_company", "")
+            # Detail-only DBpedia fields (if ADDITIONAL_DETAILS enabled)
+            if config.get("ADDITIONAL_DETAILS", False):
+                if "comment" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["comment"] = dbpedia_info.get("comment", "")
+                if "homepage" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["homepage"] = dbpedia_info.get("homepage", "")
+                if "thumbnail" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["thumbnail"] = dbpedia_info.get("thumbnail", "")
+                if "depiction" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["depiction"] = dbpedia_info.get("depiction", "")
+                if "lat" in dbpedia_info and "long" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["coordinates"] = {
+                        "latitude": dbpedia_info.get("lat", ""),
+                        "longitude": dbpedia_info.get("long", "")
+                    }
+                if "birth_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["birth_date"] = dbpedia_info.get("birth_date", "")
+                if "death_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["death_date"] = dbpedia_info.get("death_date", "")
+                if "birth_place" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["birth_place"] = dbpedia_info.get("birth_place", "")
+                if "death_place" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["death_place"] = dbpedia_info.get("death_place", "")
+                if "population" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["population"] = dbpedia_info.get("population", "")
+                if "area" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["area"] = dbpedia_info.get("area", "")
+                if "country" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["country"] = dbpedia_info.get("country", "")
+                if "region" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["region"] = dbpedia_info.get("region", "")
+                if "founding_date" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["founding_date"] = dbpedia_info.get("founding_date", "")
+                if "founder" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["founder"] = dbpedia_info.get("founder", "")
+                if "parent_company" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["parent_company"] = dbpedia_info.get("parent_company", "")
+                if "current_member" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["current_member"] = dbpedia_info.get("current_member", [])
+                if "former_member" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["former_member"] = dbpedia_info.get("former_member", [])
+                if "dbp_part_of" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["dbp_part_of"] = dbpedia_info.get("dbp_part_of", [])
+                if "dbp_member_of" in dbpedia_info:
+                    legacy_entity["sources"]["dbpedia"]["dbp_member_of"] = dbpedia_info.get("dbp_member_of", [])
         
         result.append(legacy_entity)
     

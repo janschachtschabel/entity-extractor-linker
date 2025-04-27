@@ -87,6 +87,15 @@ def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
         logging.error(f"Error retrieving DBpedia info for {wikipedia_url}: {e}")
         return {}
 
+def get_dbpedia_details(wikipedia_url, config=None):
+    """
+    Retrieve additional DBpedia details for an entity based on its Wikipedia URL.
+    Wrapper for get_dbpedia_info_from_wikipedia_url.
+    """
+    if config is None:
+        config = DEFAULT_CONFIG
+    return get_dbpedia_info_from_wikipedia_url(wikipedia_url, config)
+
 def query_dbpedia_resource(resource_uri, lang="en", config=None):
     """
     Query DBpedia for information about a resource using SPARQL.
@@ -123,7 +132,7 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
             "https://dbpedia-live.openlinksw.com/sparql"
         ]
     
-    # Construct the SPARQL query with more properties
+    # Construct the SPARQL query with property paths for types, part-whole and membership
     query = f"""
     PREFIX dbo: <http://dbpedia.org/ontology/>
     PREFIX dbp: <http://dbpedia.org/property/>
@@ -134,46 +143,53 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
     PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
     PREFIX dc: <http://purl.org/dc/elements/1.1/>
     PREFIX dcterms: <http://purl.org/dc/terms/>
-    
-    SELECT ?abstract ?label ?type ?comment ?sameAs ?homepage ?thumbnail ?depiction 
-           ?lat ?long ?subject ?category ?birthDate ?deathDate ?birthPlace ?deathPlace 
-           ?populationTotal ?areaTotal ?country ?region ?foundingDate ?founder ?parentCompany WHERE {{
-      # Basic information
-      OPTIONAL {{ <{resource_uri}> dbo:abstract ?abstract . FILTER(LANG(?abstract) = "{lang}") }}
-      OPTIONAL {{ <{resource_uri}> rdfs:label ?label . FILTER(LANG(?label) = "{lang}") }}
-      OPTIONAL {{ <{resource_uri}> rdf:type ?type . }}
-      OPTIONAL {{ <{resource_uri}> rdfs:comment ?comment . FILTER(LANG(?comment) = "{lang}") }}
-      OPTIONAL {{ <{resource_uri}> owl:sameAs ?sameAs . }}
-      
-      # Web presence
-      OPTIONAL {{ <{resource_uri}> foaf:homepage ?homepage . }}
-      OPTIONAL {{ <{resource_uri}> dbo:thumbnail ?thumbnail . }}
-      OPTIONAL {{ <{resource_uri}> foaf:depiction ?depiction . }}
-      
-      # Geo information
-      OPTIONAL {{ <{resource_uri}> geo:lat ?lat . }}
-      OPTIONAL {{ <{resource_uri}> geo:long ?long . }}
-      
-      # Categories and subjects
-      OPTIONAL {{ <{resource_uri}> dcterms:subject ?subject . }}
-      OPTIONAL {{ <{resource_uri}> dbo:category ?category . }}
-      
-      # Person-specific information
-      OPTIONAL {{ <{resource_uri}> dbo:birthDate ?birthDate . }}
-      OPTIONAL {{ <{resource_uri}> dbo:deathDate ?deathDate . }}
-      OPTIONAL {{ <{resource_uri}> dbo:birthPlace ?birthPlace . }}
-      OPTIONAL {{ <{resource_uri}> dbo:deathPlace ?deathPlace . }}
-      
-      # Location-specific information
-      OPTIONAL {{ <{resource_uri}> dbo:populationTotal ?populationTotal . }}
-      OPTIONAL {{ <{resource_uri}> dbo:areaTotal ?areaTotal . }}
-      OPTIONAL {{ <{resource_uri}> dbo:country ?country . }}
-      OPTIONAL {{ <{resource_uri}> dbo:region ?region . }}
-      
-      # Organization-specific information
-      OPTIONAL {{ <{resource_uri}> dbo:foundingDate ?foundingDate . }}
-      OPTIONAL {{ <{resource_uri}> dbo:founder ?founder . }}
-      OPTIONAL {{ <{resource_uri}> dbo:parentCompany ?parentCompany . }}
+    PREFIX dul: <http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#>
+
+    SELECT ?abstract ?label ?type ?comment ?sameAs ?homepage ?thumbnail ?depiction
+           ?lat ?long ?subject ?category ?birthDate ?deathDate ?birthPlace ?deathPlace
+           ?populationTotal ?areaTotal ?country ?region ?foundingDate ?founder ?parentCompany
+           ?part_of ?has_part ?member_of ?current_member ?former_member ?dbp_part_of ?dbp_member_of WHERE {{
+       # Basic information
+       OPTIONAL {{ <{resource_uri}> dbo:abstract ?abstract . FILTER(LANG(?abstract) = "{lang}") }}
+       OPTIONAL {{ <{resource_uri}> rdfs:label ?label . FILTER(LANG(?label) = "{lang}") }}
+       # Inherited and direct types via subclass path
+       OPTIONAL {{ <{resource_uri}> rdf:type/rdfs:subClassOf* ?type . }}
+       OPTIONAL {{ <{resource_uri}> rdfs:comment ?comment . FILTER(LANG(?comment) = "{lang}") }}
+       OPTIONAL {{ <{resource_uri}> owl:sameAs ?sameAs . }}
+       # Web presence
+       OPTIONAL {{ <{resource_uri}> foaf:homepage ?homepage . }}
+       OPTIONAL {{ <{resource_uri}> dbo:thumbnail ?thumbnail . }}
+       OPTIONAL {{ <{resource_uri}> foaf:depiction ?depiction . }}
+       # Geo information
+       OPTIONAL {{ <{resource_uri}> geo:lat ?lat . }}
+       OPTIONAL {{ <{resource_uri}> geo:long ?long . }}
+       # Categories and subjects
+       OPTIONAL {{ <{resource_uri}> dcterms:subject ?subject . }}
+       OPTIONAL {{ <{resource_uri}> dbo:category ?category . }}
+       # Additional entity info
+       OPTIONAL {{ <{resource_uri}> dbo:birthDate ?birthDate . }}
+       OPTIONAL {{ <{resource_uri}> dbo:deathDate ?deathDate . }}
+       OPTIONAL {{ <{resource_uri}> dbo:birthPlace ?birthPlace . }}
+       OPTIONAL {{ <{resource_uri}> dbo:deathPlace ?deathPlace . }}
+       OPTIONAL {{ <{resource_uri}> dbo:populationTotal ?populationTotal . }}
+       OPTIONAL {{ <{resource_uri}> dbo:areaTotal ?areaTotal . }}
+       OPTIONAL {{ <{resource_uri}> dbo:country ?country . }}
+       OPTIONAL {{ <{resource_uri}> dbo:region ?region . }}
+       OPTIONAL {{ <{resource_uri}> dbo:foundingDate ?foundingDate . }}
+       OPTIONAL {{ <{resource_uri}> dbo:founder ?founder . }}
+       OPTIONAL {{ <{resource_uri}> dbo:parentCompany ?parentCompany . }}
+       # Part-whole relations (direct and inverse)
+       OPTIONAL {{ <{resource_uri}> dbo:isPartOf ?part_of . }}
+       OPTIONAL {{ <{resource_uri}> ^dbo:hasPart ?part_of . }}
+       OPTIONAL {{ <{resource_uri}> dbo:hasPart ?has_part . }}
+       OPTIONAL {{ <{resource_uri}> ^dbo:isPartOf ?has_part . }}
+       # Membership generic (direct and inverse)
+       OPTIONAL {{ <{resource_uri}> ?p_mem ?member_of . ?p_mem rdfs:subPropertyOf* dul:hasMember . }}
+       OPTIONAL {{ <{resource_uri}> dbo:currentMember ?current_member . }}
+       OPTIONAL {{ <{resource_uri}> dbo:formerMember ?former_member . }}
+       # Wiki-infobox raw
+       OPTIONAL {{ <{resource_uri}> dbp:partof ?dbp_part_of . }}
+       OPTIONAL {{ <{resource_uri}> dbp:memberOf ?dbp_member_of . }}
     }} LIMIT 200
     """
     
@@ -309,6 +325,27 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
             if parent_companies:
                 result["parent_company"] = parent_companies[0]
                 
+            # Extract generic part-whole and membership bindings
+            vals = lambda k: [b.get(k, {}).get("value") for b in bindings if k in b]
+            part_of_vals = vals("part_of")
+            has_part_vals = vals("has_part")
+            member_of_vals = vals("member_of")
+            current_vals = vals("current_member")
+            former_vals = vals("former_member")
+            dbp_part_vals = vals("dbp_part_of")
+            dbp_member_vals = vals("dbp_member_of")
+            if part_of_vals: result["part_of"] = list(dict.fromkeys(part_of_vals))
+            if has_part_vals: result["has_parts"] = list(dict.fromkeys(has_part_vals))
+            if member_of_vals: result["member_of"] = list(dict.fromkeys(member_of_vals))
+            if current_vals: result["current_member"] = list(dict.fromkeys(current_vals))
+            if former_vals: result["former_member"] = list(dict.fromkeys(former_vals))
+            if dbp_part_vals: result["dbp_part_of"] = list(dict.fromkeys(dbp_part_vals))
+            if dbp_member_vals: result["dbp_member_of"] = list(dict.fromkeys(dbp_member_vals))
+            
+            # Ensure type and relation keys are always present (even if empty)
+            for key in ("types", "part_of", "has_parts", "member_of", "current_member", "former_member", "dbp_part_of", "dbp_member_of"):
+                result.setdefault(key, [])
+             
             logging.info(f"Successfully retrieved DBpedia data for {resource_uri} from {endpoint}")
             return result
             

@@ -28,6 +28,7 @@ def main():
         "USE_WIKIDATA": True,      # Wikidata-Verknüpfung aktivieren
         "USE_DBPEDIA": True,       # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+        "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
         # === ENTITY EXTRACTION PARAMETERS ===
@@ -277,6 +278,17 @@ def main():
         for dtype, entities_list in top_clusters:
             print(f"  {dtype} ({len(entities_list)} Entitäten): {', '.join(entities_list)}")
 
+        # Analyse gemeinsamer Wikipedia-Kategorien (Top 5)
+        wiki_cat_entities = {}
+        for ent in entities:
+            cats = ent.get("sources", {}).get("wikipedia", {}).get("categories", [])
+            for cat in cats:
+                wiki_cat_entities.setdefault(cat, []).append(ent.get("entity", ent.get("name", "")))
+        sorted_wiki_cats = sorted(wiki_cat_entities.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+        print("\nWikipedia-Kategorien mit den meisten Überschneidungen (Top 5):")
+        for cat, names in sorted_wiki_cats:
+            if len(names) > 1:
+                print(f"  {cat} ({len(names)} Entitäten): {', '.join(names)}")
     logging.info("Final results have been outputted in test.py")
 
 if __name__ == "__main__":

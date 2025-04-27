@@ -217,8 +217,7 @@ Rules:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_msg}
             ],
-            temperature=0.7,  # Higher temperature for more creative generation
-            response_format={"type": "json_object"}
+            temperature=0.7  # Higher temperature for more creative generation
         )
         
         # Log the HTTP response
@@ -291,6 +290,10 @@ Rules:
             # Ergänze implizite Entitäten via ENABLE_ENTITY_INFERENCE
             if config.get("ENABLE_ENTITY_INFERENCE", False):
                 processed_entities = infer_entities(topic, processed_entities, config)
+            
+            # Add 'sources' field for detail enrichment
+            for pe in processed_entities:
+                pe["sources"] = {}
                 
             return processed_entities
         except json.JSONDecodeError as e:

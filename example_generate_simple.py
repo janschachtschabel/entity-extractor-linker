@@ -22,9 +22,10 @@ config = {
 
     # === DATA SOURCE PARAMETERS ===
     "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-    "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
-    "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
+    "USE_WIKIDATA": True,     # Wikidata-Verknüpfung aktivieren
+    "USE_DBPEDIA": True,      # DBpedia-Verknüpfung aktivieren
     "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+    "ADDITIONAL_DETAILS": True,  # Zusätzliche Entitätsdetails abrufen
     "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
     # === ENTITY EXTRACTION PARAMETERS ===
@@ -56,10 +57,17 @@ config = {
     "ENABLE_GRAPH_VISUALIZATION": False    # Graph-Visualisierung aktivieren
 }
 
-entities = process_entities(
-    topic,
-    config
-)
+result = process_entities(topic, config)
+if isinstance(result, dict) and "entities" in result:
+    entities = result["entities"]
+else:
+    entities = result
 
 logging.info("Gebe finale Ergebnisse aus...")
 print(json.dumps(entities, indent=2, ensure_ascii=False))
+
+print("\nBeziehungen zwischen Entitäten:")
+if isinstance(result, dict) and "relationships" in result:
+    print(json.dumps(result["relationships"], indent=2, ensure_ascii=False))
+else:
+    print("Keine Beziehungen gefunden.")

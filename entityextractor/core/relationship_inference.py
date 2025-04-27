@@ -138,7 +138,7 @@ Identify additional IMPLICIT relationships between these entities that are not i
 """
         else:
             system_prompt = (
-                "Du bist ein Knowledge-Graph-Completion-Assistent. Erzeuge nur neue implizite Beziehungen zwischen den unten aufgeführten Entitäten; erfinde keine neuen Entitäten."
+                "Du bist ein Knowledge-Graph-Completion-Assistent. Erzeuge nur neue implizite Beziehungen zwischen den unten aufgeführten Entitäten; erfinde keine neuen Entitäten. Erzeuge KEINE Beziehungen, die inhaltlich oder semantisch bereits durch bestehende Beziehungen abgedeckt sind, auch wenn die Formulierung abweicht."
             )
             user_msg = f"""
 Text: ```{text}```
@@ -149,7 +149,7 @@ Entitäten:
 Bestehende Beziehungen:
 {json.dumps(existing_rels, indent=2)}
 
-Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nicht existieren, um den Graph logisch zu vervollständigen. Nutze ausschließlich die angegebenen Entitäten als Subjekt und Objekt; erfinde keine neuen Entitäten. Setze inferred="implizit".  
+Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nicht existieren und auch nicht inhaltlich/semantisch bereits durch bestehende Beziehungen abgedeckt sind (auch nicht mit anderer Formulierung), um den Graph logisch zu vervollständigen. Nutze ausschließlich die angegebenen Entitäten als Subjekt und Objekt; erfinde keine neuen Entitäten. Setze inferred="implizit".  
 """
         response = client.chat.completions.create(
             model=model,
@@ -425,7 +425,69 @@ Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nich
                 all_relationships[rel_key(rel)] = rel
         result = list(all_relationships.values())
         logging.info(f"Gesamt: {len(result)} Beziehungen (explizit + implizit)")
-        
+
+        # === LLM-basierte Deduplizierung ähnlicher Beziehungen pro (Subjekt, Objekt) ===
+        from collections import defaultdict
+        pre_dedup_count = len(result)
+        grouped = defaultdict(list)
+        for rel in result:
+            key = (rel["subject"], rel["object"])
+            grouped[key].append(rel)
+        deduped_result = []
+        for (subj, obj), rels in grouped.items():
+            if len(rels) == 1:
+                deduped_result.append(rels[0])
+                continue
+            # LLM-Prompt für dieses Paar
+            prompt_rels = [
+                {"predicate": r["predicate"], "inferred": r.get("inferred", "explicit")} for r in rels
+            ]
+            lang = config.get("LANGUAGE", "de")
+            if lang == "en":
+                user_prompt = (
+                    f"For the following relationships between subject and object, remove duplicates or very similar predicates. "
+                    f"Prefer explicit relationships over implicit ones if meaning is similar. Do not change any other fields. "
+                    f"Subject: '{subj}', Object: '{obj}', Relationships: {json.dumps(prompt_rels, ensure_ascii=False)}. "
+                    f"Return a JSON array of unique relationships with their predicates and inferred fields."
+                )
+                system_prompt = "You are a helpful assistant for deduplicating knowledge graph relationships."
+            else:
+                user_prompt = (
+                    f"Für die folgenden Beziehungen zwischen Subjekt und Objekt entferne Duplikate oder sehr ähnliche Prädikate. "
+                    f"Bevorzuge explizite Beziehungen gegenüber impliziten, falls die Bedeutung ähnlich ist. Keine anderen Felder verändern! "
+                    f"Subjekt: '{subj}', Objekt: '{obj}', Beziehungen: {json.dumps(prompt_rels, ensure_ascii=False)}. "
+                    f"Gib ein JSON-Array der einmaligen Beziehungen mit Prädikat und inferred-Feld zurück."
+                )
+                system_prompt = "Du bist ein hilfreicher Assistent zur Bereinigung von Knowledge-Graph-Beziehungen."
+            # LLM-Call
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.0,
+                    max_tokens=300
+                )
+                raw_json = response.choices[0].message.content.strip()
+                cleaned = extract_json_relationships(raw_json)
+                # Rekonstruiere vollständige Relationseinträge
+                for c in cleaned:
+                    # Finde Originalrelation mit gleichem Prädikat und inferred
+                    match = next((r for r in rels if r["predicate"] == c["predicate"] and r.get("inferred", "explicit") == c.get("inferred", "explicit")), None)
+                    if match:
+                        deduped_result.append(match)
+                    else:
+                        # Fallback: baue Relation minimal
+                        deduped_result.append({"subject": subj, "object": obj, **c})
+                logging.info(f"Dedup: ({subj} -> {obj}) | {len(rels)} → {len(cleaned)} Beziehungen nach LLM-Deduplizierung.")
+            except Exception as e:
+                logging.error(f"Fehler bei LLM-Deduplizierung für Paar ({subj}, {obj}): {e}")
+                deduped_result.extend(rels)
+        post_dedup_count = len(deduped_result)
+        logging.info(f"Beziehungen: Vor Deduplizierung: {pre_dedup_count}, Nach Deduplizierung: {post_dedup_count}")
+
         # Trainingsdaten für Beziehungsextraktion speichern
         if config.get("COLLECT_TRAINING_DATA", False):
             # Explizite Beziehungen
@@ -433,7 +495,7 @@ Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nich
             # Implizite Beziehungen, falls aktiviert
             if config.get("ENABLE_RELATIONS_INFERENCE", False):
                 save_relationship_training_data(system_prompt_implicit, user_msg_implicit, valid_relationships_implicit, config)
-        return result
+        return deduped_result
 
     except Exception as e:
         logging.error(f"Fehler beim Aufruf der OpenAI API: {e}")

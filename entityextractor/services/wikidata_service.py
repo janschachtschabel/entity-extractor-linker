@@ -369,6 +369,34 @@ def get_wikidata_details(entity_id, language="de", config=None):
         if alias_list:
             result["aliases"] = [alias.get("value") for alias in alias_list if alias.get("value")]
             
+        # P31 = instance of
+        instance_claims = claims.get("P31", [])
+        instances = []
+        for claim in instance_claims:
+            if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
+                dv = claim["mainsnak"]["datavalue"]
+                if dv.get("type") == "wikibase-entityid":
+                    iid = dv["value"]["id"]
+                    ilabel = get_wikidata_description(iid, lang=language, config=config)
+                    if ilabel and ilabel not in instances:
+                        instances.append(ilabel)
+        if instances:
+            result["instance_of"] = instances
+
+        # P279 = subclass of
+        subclass_claims = claims.get("P279", [])
+        subclasses = []
+        for claim in subclass_claims:
+            if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
+                dv = claim["mainsnak"]["datavalue"]
+                if dv.get("type") == "wikibase-entityid":
+                    sid = dv["value"]["id"]
+                    slabel = get_wikidata_description(sid, lang=language, config=config)
+                    if slabel and slabel not in subclasses:
+                        subclasses.append(slabel)
+        if subclasses:
+            result["subclass_of"] = subclasses
+            
         # Get types/classes (P31 = "instance of")
         instance_claims = claims.get("P31", [])
         types = []
@@ -538,6 +566,62 @@ def get_wikidata_details(entity_id, language="de", config=None):
                 population_value = datavalue["value"]
                 if "amount" in population_value:
                     result["population"] = population_value["amount"]
+            
+        # P361 = part of
+        part_claims = claims.get("P361", [])
+        parts = []
+        for claim in part_claims:
+            if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
+                dv = claim["mainsnak"]["datavalue"]
+                if dv.get("type") == "wikibase-entityid":
+                    pid = dv["value"]["id"]
+                    plabel = get_wikidata_description(pid, lang=language, config=config)
+                    if plabel and plabel not in parts:
+                        parts.append(plabel)
+        if parts:
+            result["part_of"] = parts
+            
+        # P527 = has part
+        has_part_claims = claims.get("P527", [])
+        has_parts = []
+        for claim in has_part_claims:
+            if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
+                dv = claim["mainsnak"]["datavalue"]
+                if dv.get("type") == "wikibase-entityid":
+                    hpid = dv["value"]["id"]
+                    hplabel = get_wikidata_description(hpid, lang=language, config=config)
+                    if hplabel and hplabel not in has_parts:
+                        has_parts.append(hplabel)
+        if has_parts:
+            result["has_parts"] = has_parts
+            
+        # P463 = member of
+        member_claims = claims.get("P463", [])
+        members = []
+        for claim in member_claims:
+            if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
+                dv = claim["mainsnak"]["datavalue"]
+                if dv.get("type") == "wikibase-entityid":
+                    mid = dv["value"]["id"]
+                    mlabel = get_wikidata_description(mid, lang=language, config=config)
+                    if mlabel and mlabel not in members:
+                        members.append(mlabel)
+        if members:
+            result["member_of"] = members
+            
+        # P227 = GND ID
+        gnd_claims = claims.get("P227", [])
+        if gnd_claims and "mainsnak" in gnd_claims[0] and "datavalue" in gnd_claims[0]["mainsnak"]:
+            dv = gnd_claims[0]["mainsnak"]["datavalue"]
+            if dv.get("type") == "string" and dv.get("value"):
+                result["gnd_id"] = dv["value"]
+                
+        # P213 = ISNI
+        isni_claims = claims.get("P213", [])
+        if isni_claims and "mainsnak" in isni_claims[0] and "datavalue" in isni_claims[0]["mainsnak"]:
+            dv = isni_claims[0]["mainsnak"]["datavalue"]
+            if dv.get("type") == "string" and dv.get("value"):
+                result["isni"] = dv["value"]
             
         return result
     except Exception as e:

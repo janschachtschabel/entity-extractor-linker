@@ -17,7 +17,9 @@ from entityextractor.services.wikipedia_service import (
     fallback_wikipedia_url,
     get_wikipedia_extract,
     convert_to_de_wikipedia_url,
-    follow_wikipedia_redirect
+    follow_wikipedia_redirect,
+    get_wikipedia_details,
+    get_wikipedia_categories
 )
 from entityextractor.services.wikidata_service import (
     get_wikidata_id_from_wikipedia_url,
@@ -58,55 +60,62 @@ def link_entities(entities, text=None, user_config=None):
             
         linked_entity = entity.copy()
         
-        # Step 1: Find Wikipedia URL
-        # Zuerst prüfen, ob das LLM bereits eine URL generiert hat
+        # Step 1: Wikipedia-URL bestimmen
         wikipedia_url = None
         llm_generated_url = entity.get("wikipedia_url", None)
-        
+
+        # 1. LLM-URL direkt nutzen, falls gültig
         if llm_generated_url and is_valid_wikipedia_url(llm_generated_url):
-            # Verwende die vom LLM generierte URL
             logging.info(f"Using LLM-generated Wikipedia URL for '{entity_name}': {llm_generated_url}")
             wikipedia_url = llm_generated_url
         else:
-            # Wenn keine URL vorhanden oder ungültig, verwende den Fallback-Mechanismus
+            # 2. Fallback nur wenn LLM-URL fehlt/ungültig
             if llm_generated_url:
                 logging.info(f"LLM-generated URL invalid or incomplete: '{llm_generated_url}'. Using fallback.")
             wikipedia_url = fallback_wikipedia_url(entity_name, language=config.get("LANGUAGE", "de"))
-        
+
         if wikipedia_url:
             linked_entity["wikipedia_url"] = wikipedia_url
-            
-            # Step 2: Follow redirects and get the correct title
-            final_url, page_title = follow_wikipedia_redirect(wikipedia_url, entity_name)
-            if final_url and final_url != wikipedia_url:
-                linked_entity["wikipedia_url"] = final_url
-                
-            if page_title and page_title != entity_name:
-                linked_entity["wikipedia_title"] = page_title
-                
-            # Step 3: Convert to German Wikipedia URL if configured
-            if config.get("CONVERT_TO_DE", False) and "en.wikipedia.org" in linked_entity["wikipedia_url"]:
-                de_url = convert_to_de_wikipedia_url(linked_entity["wikipedia_url"])
-                if de_url:
-                    linked_entity["wikipedia_url"] = de_url
-            
-            # Step 4: Get Wikipedia extract
-            extract = get_wikipedia_extract(linked_entity["wikipedia_url"], config)
-            
-            # Step 4b: Fallback if no extract found with LLM URL
-            if extract is None and llm_generated_url == wikipedia_url:
-                logging.info(f"No extract found for LLM-generated URL. Trying fallback for '{entity_name}'...")
-                fallback_url = fallback_wikipedia_url(entity_name, language=config.get("LANGUAGE", "de"))
-                
-                if fallback_url and fallback_url != wikipedia_url:
-                    logging.info(f"Using fallback URL: {fallback_url} instead of {wikipedia_url}")
-                    linked_entity["wikipedia_url"] = fallback_url
-                    
-                    # Try to get extract with fallback URL
-                    extract = get_wikipedia_extract(fallback_url, config)
-            
+
+            # Step 2: Wikipedia-Extract versuchen (ohne Redirect-Check/Opensearch)
+            extract = get_wikipedia_extract(wikipedia_url, config)
             if extract:
                 linked_entity["wikipedia_extract"] = strip_trailing_ellipsis(extract)
+            else:
+                # 3. Nur wenn kein Extract: Redirect prüfen und Fallback nutzen
+                logging.info(f"No extract found for '{entity_name}' (URL: {wikipedia_url}). Trying redirect/fallback...")
+                final_url, page_title = follow_wikipedia_redirect(wikipedia_url, entity_name)
+                if final_url and final_url != wikipedia_url:
+                    logging.info(f"Redirect detected: {wikipedia_url} -> {final_url}")
+                    linked_entity["wikipedia_url"] = final_url
+                    wikipedia_url = final_url
+                if page_title and page_title != entity_name:
+                    linked_entity["wikipedia_title"] = page_title
+                # Nochmals Extract versuchen
+                extract = get_wikipedia_extract(wikipedia_url, config)
+                if not extract:
+                    # 4. Letzter Fallback: Opensearch explizit
+                    fallback_url = fallback_wikipedia_url(entity_name, language=config.get("LANGUAGE", "de"))
+                    if fallback_url and fallback_url != wikipedia_url:
+                        logging.info(f"Using fallback URL from Opensearch: {fallback_url} for '{entity_name}'")
+                        linked_entity["wikipedia_url"] = fallback_url
+                        wikipedia_url = fallback_url
+                        extract = get_wikipedia_extract(wikipedia_url, config)
+                if extract:
+                    linked_entity["wikipedia_extract"] = strip_trailing_ellipsis(extract)
+
+            # Wikipedia-Kategorien nur, wenn ein Extract gefunden wurde
+            if linked_entity.get("wikipedia_extract"):
+                cats = get_wikipedia_categories(linked_entity["wikipedia_url"], config)
+                if cats:
+                    linked_entity["wikipedia_categories"] = cats
+
+            # Zusätzliche Details nur, wenn ein Extract gefunden wurde
+            if config.get("ADDITIONAL_DETAILS", False) and linked_entity.get("wikipedia_extract"):
+                wiki_details = get_wikipedia_details(linked_entity["wikipedia_url"], config)
+                if wiki_details:
+
+                    linked_entity["wikipedia_details"] = wiki_details
             
             # Step 5: Get Wikidata ID and details
             if config.get("USE_WIKIDATA", True):
@@ -142,32 +151,36 @@ def link_entities(entities, text=None, user_config=None):
                         if "subclasses" in wikidata_details:
                             linked_entity["wikidata_subclasses"] = wikidata_details["subclasses"]
                             
-                        # Add image URL if available
-                        if "image_url" in wikidata_details:
-                            linked_entity["image_url"] = wikidata_details["image_url"]
-                            
-                        # Add website if available
-                        if "website" in wikidata_details:
-                            linked_entity["website"] = wikidata_details["website"]
-                            
-                        # Add coordinates if available
-                        if "coordinates" in wikidata_details:
-                            linked_entity["coordinates"] = wikidata_details["coordinates"]
-                            
-                        # Add foundation date if available
-                        if "foundation_date" in wikidata_details:
-                            linked_entity["foundation_date"] = wikidata_details["foundation_date"]
-                            
-                        # Add birth and death dates if available
-                        if "birth_date" in wikidata_details:
-                            linked_entity["birth_date"] = wikidata_details["birth_date"]
-                            
-                        if "death_date" in wikidata_details:
-                            linked_entity["death_date"] = wikidata_details["death_date"]
-                            
-                        # Add occupations if available
-                        if "occupations" in wikidata_details:
-                            linked_entity["occupations"] = wikidata_details["occupations"]
+                        # Always include P361, P527, P463
+                        if "part_of" in wikidata_details:
+                            linked_entity["part_of"] = wikidata_details.get("part_of", [])
+                        if "has_parts" in wikidata_details:
+                            linked_entity["has_parts"] = wikidata_details.get("has_parts", [])
+                        if "member_of" in wikidata_details:
+                            linked_entity["member_of"] = wikidata_details.get("member_of", [])
+                        
+                        if config.get("ADDITIONAL_DETAILS", False):
+                            # Add image URL if available
+                            if "image_url" in wikidata_details:
+                                linked_entity["image_url"] = wikidata_details["image_url"]
+                            # Add website if available
+                            if "website" in wikidata_details:
+                                linked_entity["website"] = wikidata_details["website"]
+                            # Add coordinates if available
+                            if "coordinates" in wikidata_details:
+                                linked_entity["coordinates"] = wikidata_details["coordinates"]
+                            # Add foundation date if available
+                            if "foundation_date" in wikidata_details:
+                                linked_entity["foundation_date"] = wikidata_details["foundation_date"]
+                            # Add birth and death dates if available
+                            if "birth_date" in wikidata_details:
+                                linked_entity["birth_date"] = wikidata_details["birth_date"]
+                            if "death_date" in wikidata_details:
+                                linked_entity["death_date"] = wikidata_details["death_date"]
+                            # Add occupations if available
+                            if "occupations" in wikidata_details:
+                                linked_entity["occupations"] = wikidata_details["occupations"]
+                            linked_entity["wikidata_details"] = wikidata_details
             
             # Step 6: Get DBpedia information
             if config.get("USE_DBPEDIA", False):
@@ -196,9 +209,21 @@ def link_entities(entities, text=None, user_config=None):
                     if "types" in dbpedia_info:
                         linked_entity["dbpedia_types"] = dbpedia_info["types"]
                         
+                    # Add DBpedia relations if available
+                    if "part_of" in dbpedia_info:
+                        linked_entity["dbpedia_part_of"] = dbpedia_info["part_of"]
+                    if "has_parts" in dbpedia_info:
+                        linked_entity["dbpedia_has_parts"] = dbpedia_info["has_parts"]
+                    if "member_of" in dbpedia_info:
+                        linked_entity["dbpedia_member_of"] = dbpedia_info["member_of"]
+                        
                     # Add language information
                     if "language" in dbpedia_info:
                         linked_entity["dbpedia_language"] = dbpedia_info["language"]
+                    
+                    # Additional DBpedia details
+                    if config.get("ADDITIONAL_DETAILS", False):
+                        linked_entity["dbpedia_details"] = dbpedia_info
         
         linked_entities.append(linked_entity)
     

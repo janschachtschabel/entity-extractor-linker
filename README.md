@@ -115,6 +115,7 @@ Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt. Alle
 | `USE_WIKIPEDIA` | bool | `True` | Wikipedia-Integration aktivieren |
 | `USE_WIKIDATA` | bool | `True` | Wikidata-Integration aktivieren |
 | `USE_DBPEDIA` | bool | `True` | DBpedia-Integration aktivieren |
+| `ADDITIONAL_DETAILS` | bool | `False` | Abruf zusätzlicher Details aus den Wissensquellen aktivieren |
 | `DBPEDIA_USE_DE` | bool | `True` | Deutsche DBpedia-Server verwenden |
 | `TIMEOUT_THIRD_PARTY` | int | `20` | Timeout für externe API-Anfragen in Sekunden |
 | `OPENAI_API_KEY` | string | `None` | OpenAI API-Schlüssel (None = aus Umgebungsvariable laden) |
