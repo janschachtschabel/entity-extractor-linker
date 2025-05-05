@@ -6,12 +6,13 @@ from openai import OpenAI
 from entityextractor.config.settings import get_config
 from entityextractor.utils.logging_utils import configure_logging
 from entityextractor.services.openai_service import save_relationship_training_data
+from entityextractor.prompts.deduplication_prompts import get_system_prompt_dedup_en, get_user_prompt_dedup_en, get_system_prompt_dedup_de, get_user_prompt_dedup_de
 from .relationship_inference import extract_json_relationships
 
 def deduplicate_relationships_llm(relationships, entities, user_config=None):
     """
-    Bereinigt eine Liste von Beziehungen (Tripeln) per LLM, sodass pro (Subjekt, Objekt) nur wirklich unterschiedliche Prädikate übrigbleiben.
-    Das LLM bekommt ALLE Triple mit identischem (Subjekt, Objekt) als Prompt und gibt eine bereinigte Liste zurück, in der semantisch gleiche/ähnliche Prädikate gruppiert und nur die beste Formulierung behalten wird.
+    Bereinigt eine Liste von Beziehungen (Tripeln) per LLM, sodass pro (Entitätenpaar) nur wirklich unterschiedliche Prädikate übrigbleiben.
+    Das LLM bekommt ALLE Triple mit identischem Entitätenpaar als Prompt und gibt eine bereinigte Liste zurück, in der semantisch gleiche/ähnliche Prädikate gruppiert und nur die beste Formulierung behalten wird.
     """
     config = get_config(user_config)
     configure_logging(config)
@@ -27,12 +28,15 @@ def deduplicate_relationships_llm(relationships, entities, user_config=None):
     client = OpenAI(api_key=api_key)
     model = config.get("MODEL", "gpt-4.1-mini")
     language = config.get("LANGUAGE", "de")
+    # Gruppieren nach Entity-Paar unabhängig von Richtung (beide Richtungen im gleichen Prompt)
     grouped = defaultdict(list)
     for rel in relationships:
-        key = (rel["subject"], rel["object"])
+        key = frozenset([rel["subject"], rel["object"]])
         grouped[key].append(rel)
     deduped_result = []
-    for (subj, obj), rels in grouped.items():
+    for pair, rels in grouped.items():
+        # Für Prompt benötigen wir Subject und Object im Original (Richtung irrelevant)
+        subj, obj = tuple(pair)
         if len(rels) == 1:
             deduped_result.append(rels[0])
             continue
@@ -40,22 +44,14 @@ def deduplicate_relationships_llm(relationships, entities, user_config=None):
         prompt_rels = [
             {"predicate": r["predicate"], "inferred": r.get("inferred", "explicit")} for r in rels
         ]
+        prompt_rels_json = json.dumps(prompt_rels, ensure_ascii=False)
+        # Zentrale Prompt-Definition verwenden
         if language == "en":
-            user_prompt = (
-                f"For the following relationships between subject and object, group all semantically similar predicates together, including those that are only grammatically or stylistically different (e.g. tense, prepositions, auxiliary verbs, etc.). "
-                f"Keep only the most concise and representative formulation for each unique relationship. "
-                f"Subject: '{subj}', Object: '{obj}', Relationships: {json.dumps(prompt_rels, ensure_ascii=False)}. "
-                f"Return a JSON array of unique relationships with their predicates and inferred fields."
-            )
-            system_prompt = "You are a helpful assistant for deduplicating knowledge graph relationships."
+            system_prompt = get_system_prompt_dedup_en()
+            user_prompt = get_user_prompt_dedup_en(subj, obj, prompt_rels_json)
         else:
-            user_prompt = (
-                f"Für die folgenden Beziehungen zwischen Subjekt und Objekt gruppiere alle Prädikate, die semantisch gleich oder sehr ähnlich sind, auch wenn sie sich nur grammatisch, durch Zeitform, Hilfswörter oder Präpositionen unterscheiden. "
-                f"Behalte nur die prägnanteste und repräsentativste Formulierung jeder inhaltlich unterschiedlichen Beziehung. "
-                f"Subjekt: '{subj}', Objekt: '{obj}', Beziehungen: {json.dumps(prompt_rels, ensure_ascii=False)}. "
-                f"Gib ein JSON-Array der einmaligen Beziehungen mit Prädikat und inferred-Feld zurück."
-            )
-            system_prompt = "Du bist ein hilfreicher Assistent zur Bereinigung von Knowledge-Graph-Beziehungen."
+            system_prompt = get_system_prompt_dedup_de()
+            user_prompt = get_user_prompt_dedup_de(subj, obj, prompt_rels_json)
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -74,7 +70,12 @@ def deduplicate_relationships_llm(relationships, entities, user_config=None):
                     deduped_result.append(match)
                 else:
                     deduped_result.append({"subject": subj, "object": obj, **c})
-            logging.info(f"LLM-Dedup: ({subj} -> {obj}) | {len(rels)} → {len(cleaned)} Beziehungen nach LLM-Deduplizierung.")
+            # Kurzdarstellung: Eingabe-Prädikate vs. verbleibende Prädikate
+            logging.info(
+                f"LLM-Dedup: ({subj} -> {obj}) | {len(rels)} → {len(cleaned)} Beziehungen. "
+                f"Eingabe: {[r['predicate'] for r in rels]}; "
+                f"Behalten: {[c['predicate'] for c in cleaned]}"
+            )
         except Exception as e:
             logging.error(f"Fehler bei LLM-Deduplizierung für Paar ({subj}, {obj}): {e}")
             deduped_result.extend(rels)

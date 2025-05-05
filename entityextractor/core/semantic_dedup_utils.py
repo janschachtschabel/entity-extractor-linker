@@ -2,13 +2,15 @@ import difflib
 
 def filter_semantically_similar_relationships(relationships, similarity_threshold=0.85):
     """
-    Entfernt Beziehungen mit (Subjekt, Objekt), deren Prädikat semantisch/fuzzy sehr ähnlich ist.
+    Entfernt Beziehungen zwischen denselben Entitäten (unabhängig von Reihenfolge),
+    deren Prädikat semantisch/fuzzy sehr ähnlich ist.
     Nur das Triple mit dem "prägnantesten" Prädikat (kürzester String) bleibt erhalten.
     """
     from collections import defaultdict
     grouped = defaultdict(list)
     for rel in relationships:
-        key = (rel["subject"], rel["object"])
+        # Gruppieren nach Entity-Paar unabhängig von Richtung
+        key = frozenset([rel["subject"], rel["object"]])
         grouped[key].append(rel)
     result = []
     for (subj, obj), rels in grouped.items():

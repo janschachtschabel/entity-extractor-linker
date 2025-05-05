@@ -26,7 +26,7 @@ def main():
         # === DATA SOURCE PARAMETERS ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
         "USE_WIKIDATA": True,      # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": True,       # DBpedia-Verknüpfung aktivieren
+        "USE_DBPEDIA": False,       # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
         "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter

@@ -9,9 +9,15 @@ import logging
 import requests
 import urllib.parse
 from SPARQLWrapper import SPARQLWrapper, JSON
+import os
+import json
+import hashlib
+from urllib.error import HTTPError, URLError
+import xml.etree.ElementTree as ET
 
 from entityextractor.config.settings import DEFAULT_CONFIG
 from entityextractor.services.wikipedia_service import get_wikipedia_title_in_language
+from entityextractor.utils.cache_utils import get_cache_path, load_cache, save_cache
 
 def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
     """
@@ -46,6 +52,9 @@ def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
             
         title = splitted[1].split("#")[0]
         title = urllib.parse.unquote(title).replace("_", " ")
+        # Keep original extracted title for lookup translation
+        raw_title = title
+        translation_for_lookup = None
         
         # Determine target language based on configuration
         target_lang = "de" if config.get("DBPEDIA_USE_DE", False) else "en"
@@ -61,6 +70,7 @@ def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
             
             if translated_title:
                 title = translated_title
+                translation_for_lookup = translated_title
                 logging.info(f"Translated title for DBpedia: {source_lang}:{title} -> {target_lang}:{translated_title}")
             else:
                 logging.warning(f"Could not translate title for DBpedia: {source_lang}:{title} -> {target_lang}")
@@ -75,8 +85,110 @@ def get_dbpedia_info_from_wikipedia_url(wikipedia_url, config=None):
         else:  # target_lang == "en" or other
             resource_uri = f"http://dbpedia.org/resource/{title.replace(' ', '_')}"
         
-        # Query DBpedia for information about the resource
-        result = query_dbpedia_resource(resource_uri, target_lang, config)
+        # Query DBpedia for information about the resource or skip if configured
+        if config.get("DBPEDIA_SKIP_SPARQL", False):
+            result = {}
+            logging.info("Skipping SPARQL queries as per configuration.")
+        else:
+            result = query_dbpedia_resource(resource_uri, target_lang, config)
+        
+        # Fallback via Lookup API if SPARQL returned no data and lookup enabled
+        if not result and config.get("DBPEDIA_LOOKUP_API", False):
+            if translation_for_lookup:
+                lookup_term = translation_for_lookup
+            else:
+                lookup_term = title
+                if source_lang.lower() != "en":
+                    try:
+                        translated = get_wikipedia_title_in_language(raw_title, from_lang=source_lang, to_lang="en", config=config)
+                        translation_for_lookup = translated or title
+                        lookup_term = translation_for_lookup
+                    except Exception as te:
+                        logging.warning(f"Lookup translation failed for {raw_title}: {te}")
+            # Use Lookup API and parse JSON docs or XML; include types and categories
+            fmt = config.get("DBPEDIA_LOOKUP_FORMAT", "json").lower()
+            use_json = fmt in ("json", "both")
+            use_xml = fmt in ("xml", "both")
+            logging.info(f"Using DBpedia Lookup API fallback for term '{lookup_term}' (format={fmt})")
+            lookup_url = "http://lookup.dbpedia.org/api/search/KeywordSearch"
+            # Separate JSON and XML calls to avoid parsing conflicts
+            json_items = []
+            if use_json:
+                try:
+                    params_j = {"QueryString": lookup_term, "MaxHits": config.get("DBPEDIA_LOOKUP_MAX_HITS", 5), "format": "json"}
+                    headers_j = {"Accept": "application/json"}
+                    resp_j = requests.get(lookup_url, params=params_j, headers=headers_j, timeout=config.get("TIMEOUT_THIRD_PARTY", 15))
+                    resp_j.raise_for_status()
+                    data_j = resp_j.json()
+                    json_items = data_j.get("results") or data_j.get("docs") or []
+                except Exception as je:
+                    logging.warning(f"DBpedia Lookup JSON fallback failed for {lookup_term}: {je}")
+            xml_items = []
+            if use_xml:
+                try:
+                    params_x = {"QueryString": lookup_term, "MaxHits": config.get("DBPEDIA_LOOKUP_MAX_HITS", 5), "format": "xml"}
+                    headers_x = {"Accept": "application/xml"}
+                    resp_x = requests.get(lookup_url, params=params_x, headers=headers_x, timeout=config.get("TIMEOUT_THIRD_PARTY", 15))
+                    resp_x.raise_for_status()
+                    root = ET.fromstring(resp_x.text)
+                    for res in root.findall(".//Result"):
+                        xml_items.append({
+                            "URI": res.findtext("URI"),
+                            "Label": res.findtext("Label"),
+                            "Description": res.findtext("Description") or "",
+                            "Classes": [cls.findtext("URI") for cls in res.findall(".//Classes/Class")],
+                            "Categories": [cat.findtext("URI") for cat in res.findall(".//Categories/Category")]
+                        })
+                except Exception as xe:
+                    logging.warning(f"DBpedia Lookup XML fallback failed for {lookup_term}: {xe}")
+            # Merge JSON and XML items by URI
+            merged = {}
+            for item in json_items:
+                uri_key = item.get("URI") or (item.get("resource")[0] if isinstance(item.get("resource"), list) else item.get("resource"))
+                merged[uri_key] = dict(item)
+            for item in xml_items:
+                uri_key = item.get("URI")
+                if uri_key in merged:
+                    merged[uri_key].update(item)
+                else:
+                    merged[uri_key] = item
+            # Select best hit by matching constructed resource_uri, else first
+            selected = None
+            for uri_key, itm in merged.items():
+                if uri_key == resource_uri:
+                    selected = itm
+                    break
+            if not selected and merged:
+                selected = next(iter(merged.values()))
+            # Build result from selected hit
+            if selected:
+                raw_uri = selected.get("URI") or selected.get("uri") or resource_uri
+                raw_label = selected.get("Label") or (selected.get("label")[0] if isinstance(selected.get("label"), list) else selected.get("label")) or ""
+                raw_desc = selected.get("Description") or selected.get("description") or (selected.get("comment")[0] if isinstance(selected.get("comment"), list) else selected.get("comment")) or ""
+                raw_types = selected.get("type") or selected.get("Classes") or selected.get("typeName") or []
+                raw_categories = selected.get("category") or selected.get("Categories") or []
+                result = {
+                    "resource_uri": raw_uri,
+                    "label": raw_label,
+                    "abstract": raw_desc,
+                    "types": raw_types,
+                    "categories": raw_categories
+                }
+                # Save DBpedia Lookup API fallback results to cache
+                if config.get("CACHE_ENABLED") and config.get("CACHE_DBPEDIA_ENABLED"):
+                    cache_dir = config.get("CACHE_DIR", "cache")
+                    lookup_cache_dir = os.path.join(cache_dir, "dbpedia_lookup")
+                    os.makedirs(lookup_cache_dir, exist_ok=True)
+                    cache_key = hashlib.sha256(resource_uri.encode("utf-8")).hexdigest()
+                    cache_path = os.path.join(lookup_cache_dir, f"{cache_key}.json")
+                    try:
+                        with open(cache_path, "w", encoding="utf-8") as f:
+                            json.dump(result, f)
+                        logging.info(f"Saved DBpedia Lookup cache for {resource_uri} to {cache_path}")
+                    except Exception as e:
+                        logging.warning(f"Failed to save DBpedia Lookup cache {cache_path}: {e}")
+        # Include the resource URI in the returned info
+        result["resource_uri"] = resource_uri
         
         # Add metadata to the result
         result["dbpedia_language"] = target_lang
@@ -114,22 +226,34 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
     timeout = config.get("TIMEOUT_THIRD_PARTY", 15)
     dbpedia_timeout = config.get("DBPEDIA_TIMEOUT", timeout)
     
+    # === DBpedia SPARQL query caching ===
+    if config.get("CACHE_ENABLED") and config.get("CACHE_DBPEDIA_ENABLED"):
+        cache_path = get_cache_path(config.get("CACHE_DIR", "cache"), "dbpedia", resource_uri)
+        cached = load_cache(cache_path)
+        if cached is not None:
+            logging.debug(f"Loaded DBpedia cache for {resource_uri}")
+            return cached
+    
     # Define endpoints based on language
     if lang == "de":
         endpoints = [
-            # German DBpedia endpoint
+            # German DBpedia endpoint (HTTP only)
             "http://de.dbpedia.org/sparql",
-            # Fallback to main DBpedia endpoint
+            # Main DBpedia endpoint (HTTPS)
+            "https://dbpedia.org/sparql",
+            # Main DBpedia endpoint (HTTP)
             "http://dbpedia.org/sparql",
-            "https://dbpedia.org/sparql"
+            # Live DBpedia endpoint (HTTP only fallback)
+            "http://live.dbpedia.org/sparql"
         ]
     else:  # lang == "en" or other
         endpoints = [
-            # Main DBpedia endpoint (for English)
-            "http://dbpedia.org/sparql",
+            # Main DBpedia endpoint (HTTPS)
             "https://dbpedia.org/sparql",
-            # Public DBpedia endpoint as fallback
-            "https://dbpedia-live.openlinksw.com/sparql"
+            # Main DBpedia endpoint (HTTP)
+            "http://dbpedia.org/sparql",
+            # Live DBpedia endpoint (HTTP only fallback)
+            "http://live.dbpedia.org/sparql"
         ]
     
     # Construct the SPARQL query with property paths for types, part-whole and membership
@@ -201,11 +325,27 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
             sparql.setQuery(query)
             sparql.setReturnFormat(JSON)
             sparql.setTimeout(dbpedia_timeout)
-            
-            # Execute the query
+
+            # Execute the query with HTTPS -> HTTP fallback on TLS errors and HTTP 5xx
             logging.info(f"Querying DBpedia endpoint {endpoint} for resource: {resource_uri}")
-            results = sparql.query().convert()
-            
+            try:
+                response = sparql.query()
+            except HTTPError as e:
+                if 500 <= e.code < 600:
+                    logging.warning(f"Server error {e.code} at {endpoint}, switching to next endpoint")
+                    continue
+                logging.error(f"HTTP error {e.code} at {endpoint}: {e}")
+                continue
+            except URLError as e:
+                logging.warning(f"Network/TLS error at {endpoint}: {e.reason}")
+                continue
+
+            try:
+                results = response.convert()
+            except Exception as e:
+                logging.warning(f"Error parsing results from {endpoint} for {resource_uri}: {e}")
+                continue
+
             # Process the results
             bindings = results.get("results", {}).get("bindings", [])
             if not bindings:
@@ -222,8 +362,11 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
             # Extract labels
             labels = [b.get("label", {}).get("value") for b in bindings if "label" in b]
             if labels:
-                result["labels"] = list(dict.fromkeys(labels))  # Deduplizieren
-            
+                unique_labels = list(dict.fromkeys(labels))  # Deduplizieren
+                result["labels"] = unique_labels
+                # Provide singular label for orchestrator
+                result["label"] = unique_labels[0]
+                
             # Extract abstract
             abstracts = [b.get("abstract", {}).get("value") for b in bindings if "abstract" in b]
             if abstracts:
@@ -347,6 +490,9 @@ def query_dbpedia_resource(resource_uri, lang="en", config=None):
                 result.setdefault(key, [])
              
             logging.info(f"Successfully retrieved DBpedia data for {resource_uri} from {endpoint}")
+            # Save to cache
+            if config.get("CACHE_ENABLED") and config.get("CACHE_DBPEDIA_ENABLED"):
+                save_cache(cache_path, result)
             return result
             
         except Exception as e:

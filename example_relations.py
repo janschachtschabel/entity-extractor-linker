@@ -37,8 +37,8 @@ def main():
 
         # === Data Source Parameters ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-        "USE_WIKIDATA": False,      # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": False,       # DBpedia-Verknüpfung aktivieren
+        "USE_WIKIDATA": True,      # Wikidata-Verknüpfung aktivieren
+        "USE_DBPEDIA": True,       # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
         "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
@@ -53,7 +53,7 @@ def main():
 
         # === Relation Parameters ===
         "RELATION_EXTRACTION": True,          # Relationsextraktion aktivieren
-        "ENABLE_RELATIONS_INFERENCE": True,  # Implizite Relationen aktivieren
+        "ENABLE_RELATIONS_INFERENCE": False,  # Implizite Relationen aktivieren
 
         # === Other Settings ===
         "SUPPRESS_TLS_WARNINGS": True, # TLS-Warnungen unterdrücken
@@ -114,17 +114,20 @@ def main():
                 wikidata_label = entity["sources"]["wikidata"].get("label", "")[:15]
             
             # DBpedia-Informationen
-            dbpedia_title = ""
-            dbpedia_uri = ""
             if "sources" in entity and "dbpedia" in entity["sources"]:
-                dbpedia_title = entity["sources"]["dbpedia"].get("title", "")[:20]
-                dbpedia_uri = entity["sources"]["dbpedia"].get("uri", "")
+                src = entity["sources"]["dbpedia"]
+                # title aus dbpedia_title oder title
+                dbpedia_title = src.get("dbpedia_title", "")[:20] or src.get("title", "")[:20]
+                # uri aus resource_uri oder uri
+                dbpedia_uri = src.get("resource_uri", "") or src.get("uri", "")
+            # Anzeige: bevorzugt Titel, ansonsten URI
+            dbpedia_display = dbpedia_title or dbpedia_uri
             
             # Inferred aus Details
             inferred = entity.get('details', {}).get('inferred', entity.get('inferred', ''))
             
             # Zeile ausgeben
-            print(f"{i+1:3} | {name:25} | {entity_type:15} | {inferred:10} | {wiki_label:25} | {wikidata_id:15} | {dbpedia_title:20}")
+            print(f"{i+1:3} | {name:25} | {entity_type:15} | {inferred:10} | {wiki_label:25} | {wikidata_id:15} | {dbpedia_display:20}")
         
         print("-" * 100)
         print(f"Insgesamt {len(result['entities'])} Entitäten gefunden.")

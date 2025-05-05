@@ -23,8 +23,8 @@ entities = process_entities(
 
         # === Data Source Parameters ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-        "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
+        "USE_WIKIDATA": True,     # Wikidata-Verknüpfung aktivieren
+        "USE_DBPEDIA": True,      # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
         "ADDITIONAL_DETAILS": True,  # Zusätzliche Entitätsdetails aus den Wissensquellen abrufen
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
@@ -33,7 +33,7 @@ entities = process_entities(
         "MAX_ENTITIES": 5,         # Max. Anzahl Entitäten
         "ALLOWED_ENTITY_TYPES": "auto", # Entitätstypen automatisch filtern
         "MODE": "extract",         # Modus (extract, generate, compendium)
-        "LANGUAGE": "de",          # Sprache (de, en)
+        "LANGUAGE": "en",          # Sprache (de, en)
         "SHOW_STATUS": True,       # Statusmeldungen anzeigen
         "ENABLE_ENTITY_INFERENCE": False, # Entity-Inferenz aktivieren
 

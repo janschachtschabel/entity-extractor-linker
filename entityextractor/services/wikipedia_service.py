@@ -11,6 +11,11 @@ import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 import wptools
+import os
+import json
+import hashlib
+from entityextractor.services.wikidata_service import generate_entity_synonyms
+from entityextractor.utils.cache_utils import get_cache_path, load_cache, save_cache
 
 from entityextractor.config.settings import DEFAULT_CONFIG
 from entityextractor.utils.text_utils import is_valid_wikipedia_url
@@ -122,11 +127,14 @@ def convert_to_de_wikipedia_url(wikipedia_url):
         return wikipedia_url, None
 
 def fallback_wikipedia_url(query, langs=None, language="de"):
-    # fallback_wikipedia_url gibt bereits eine valide URL zurück, aber wir encodieren sicherheitshalber
-    # (falls Opensearch einen ungecodeten Titel liefert)
-    # Die Funktion wird aber meistens intern aufgerufen, daher optional am Ende encodieren
-    # (siehe get_wikipedia_extract)
-    pass  # Keine Änderung direkt, Encodierung erfolgt bei Verwendung
+    # Decode any percent-encoded characters to get proper Unicode query
+    try:
+        query = urllib.parse.unquote(query)
+        # Normalize query: replace underscores and remove parentheses for better search
+        query = query.replace('_', ' ')
+        query = re.sub(r'[()]', '', query)
+    except Exception as e:
+        logging.warning(f"Error decoding query for fallback: {e}")
     """
     Search for a Wikipedia article for an entity and return a valid URL.
     
@@ -256,17 +264,24 @@ def get_wikipedia_extract(wikipedia_url, config=None):
     """
     if config is None:
         config = DEFAULT_CONFIG
+    # === Wikipedia extract caching ===
+    if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIPEDIA_ENABLED"):
+        cache_path = get_cache_path(config.get("CACHE_DIR", "cache"), "wikipedia", wikipedia_url)
+        cached = load_cache(cache_path)
+        if cached is not None:
+            logging.debug(f"Loaded Wikipedia extract cache for {wikipedia_url}")
+            return cached.get("extract"), cached.get("wikidata_id")
         
     try:
         splitted = wikipedia_url.split("/wiki/")
         if len(splitted) < 2:
             logging.warning("Wikipedia URL has unexpected format (Extract): %s", wikipedia_url)
-            return None
+            return None, None
         title = splitted[1].split("#")[0]
         title_plain = urllib.parse.unquote(title)
     except Exception as e:
         logging.error("Error extracting title for extract: %s", e)
-        return None
+        return None, None
 
     try:
         if "://" in wikipedia_url:
@@ -279,78 +294,82 @@ def get_wikipedia_extract(wikipedia_url, config=None):
         logging.error("Error determining language for extract: %s", e)
         lang = "de"
 
-    # 1. Versuch: Wikipedia API für Extract (LLM-URL)
-    api_url = f"https://{lang}.wikipedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "prop": "extracts",
-        "exintro": True,
-        "explaintext": True,
-        "format": "json",
-        "titles": title_plain
-    }
     try:
+        # 1. Versuch: Wikipedia API für Extract (LLM-URL)
+        api_url = f"https://{lang}.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "prop": "extracts|pageprops",
+            "ppprop": "wikibase_item",
+            "exintro": True,
+            "explaintext": True,
+            "format": "json",
+            "titles": title_plain
+        }
         r = requests.get(api_url, params=params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
         r.raise_for_status()
         data = r.json()
         pages = data.get("query", {}).get("pages", {})
         for page_id, page in pages.items():
             extract_text = page.get("extract", "")
+            wikidata_id = page.get("pageprops", {}).get("wikibase_item")
             if extract_text:
                 logging.info(f"Wikipedia extract for URL {wikipedia_url} successfully loaded.")
-                return extract_text
-        # Kein Extract gefunden: Jetzt Fallback-URL (Opensearch) versuchen
-        logging.warning(f"No Wikipedia extract found for URL {wikipedia_url}. Trying fallback URL (Opensearch)...")
-        fallback_url = fallback_wikipedia_url(title, language=lang)
-        if fallback_url and fallback_url != wikipedia_url:
+                # Save cache
+                if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIPEDIA_ENABLED"):
+                    save_cache(cache_path, {"extract": extract_text, "wikidata_id": wikidata_id})
+                    logging.debug(f"Saved Wikipedia extract cache for {wikipedia_url}")
+                return extract_text, wikidata_id
+        # Kein Extract gefunden: Prüfe Softredirect vor Opensearch
+        logging.warning(f"No Wikipedia extract found for URL {wikipedia_url}. Checking softredirect first...")
+        # Fragment entfernen
+        base_url = wikipedia_url.split('#')[0]
+        # Softredirect prüfen
+        final_url, final_title = follow_wikipedia_redirect(base_url, title_plain)
+        if final_url and final_url != base_url:
+            logging.info(f"Softredirect erkannt: {base_url} -> {final_url} | Versuche Extrakt erneut.")
             try:
-                splitted_fb = fallback_url.split("/wiki/")
-                if len(splitted_fb) < 2:
-                    logging.warning("Fallback Wikipedia URL has unexpected format: %s", fallback_url)
-                else:
-                    fb_title = splitted_fb[1].split("#")[0]
-                    fb_title_plain = urllib.parse.unquote(fb_title)
-                    fb_api_url = f"https://{lang}.wikipedia.org/w/api.php"
+                sr_spl = final_url.split("/wiki/")
+                if len(sr_spl) >= 2:
+                    sr_title_plain = urllib.parse.unquote(sr_spl[1].split("#")[0])
+                    srv_api = f"https://{lang}.wikipedia.org/w/api.php"
+                    srv_params = params.copy()
+                    srv_params["titles"] = sr_title_plain
+                    r_sr = requests.get(srv_api, params=srv_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
+                    r_sr.raise_for_status()
+                    srv_pages = r_sr.json().get("query", {}).get("pages", {})
+                    for srv_page in srv_pages.values():
+                        srv_extract = srv_page.get("extract", "")
+                        if srv_extract:
+                            logging.info(f"Wikipedia extract nach Softredirect für URL {final_url} erfolgreich geladen.")
+                            return srv_extract, None
+            except Exception as e:
+                logging.error(f"Error during redirect extract for {final_url}: {e}")
+        # Softredirect nicht angewendet oder kein Inhalt, nun Opensearch-Fallback
+        logging.warning(f"No Wikipedia extract found; trying fallback URL via Opensearch.")
+        # Single Opensearch fallback with prioritized languages
+        priority_langs = [lang] if lang == 'en' else [lang, 'en']
+        fallback_url = fallback_wikipedia_url(title_plain, langs=priority_langs)
+        if fallback_url and fallback_url != base_url:
+            try:
+                fb_spl = fallback_url.split("/wiki/")
+                if len(fb_spl) >= 2:
+                    fb_title_plain = urllib.parse.unquote(fb_spl[1].split("#")[0])
+                    parsed_fb = urllib.parse.urlparse(fallback_url)
+                    fb_lang = parsed_fb.netloc.split('.')[0]
+                    fb_api_url = f"https://{fb_lang}.wikipedia.org/w/api.php"
                     fb_params = params.copy()
                     fb_params["titles"] = fb_title_plain
                     r_fb = requests.get(fb_api_url, params=fb_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
                     r_fb.raise_for_status()
-                    fb_data = r_fb.json()
-                    fb_pages = fb_data.get("query", {}).get("pages", {})
-                    for fb_page_id, fb_page in fb_pages.items():
+                    fb_pages = r_fb.json().get("query", {}).get("pages", {})
+                    for fb_page in fb_pages.values():
                         fb_extract = fb_page.get("extract", "")
                         if fb_extract:
-                            logging.info(f"Wikipedia extract for fallback URL {fallback_url} successfully loaded.")
-                            return fb_extract
-            except Exception as fb_error:
-                logging.error(f"Error retrieving Wikipedia extract for fallback URL {fallback_url}: {fb_error}")
-        # Prüfe vor BeautifulSoup auf Softredirects (canonical)
-        final_url, final_title = follow_wikipedia_redirect(wikipedia_url, title)
-        if final_url != wikipedia_url:
-            logging.info(f"Softredirect erkannt: {wikipedia_url} -> {final_url} | Versuche Extrakt erneut.")
-            # Versuche erneut den Extract für die Zielseite
-            try:
-                splitted_sr = final_url.split("/wiki/")
-                if len(splitted_sr) < 2:
-                    logging.warning("Softredirect-Ziel-URL hat unerwartetes Format: %s", final_url)
-                else:
-                    sr_title = splitted_sr[1].split("#")[0]
-                    sr_title_plain = urllib.parse.unquote(sr_title)
-                    sr_api_url = f"https://{lang}.wikipedia.org/w/api.php"
-                    sr_params = params.copy()
-                    sr_params["titles"] = sr_title_plain
-                    r_sr = requests.get(sr_api_url, params=sr_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
-                    r_sr.raise_for_status()
-                    sr_data = r_sr.json()
-                    sr_pages = sr_data.get("query", {}).get("pages", {})
-                    for sr_page_id, sr_page in sr_pages.items():
-                        sr_extract = sr_page.get("extract", "")
-                        if sr_extract:
-                            logging.info(f"Wikipedia extract nach Softredirect für URL {final_url} erfolgreich geladen.")
-                            return sr_extract
-            except Exception as sr_error:
-                logging.error(f"Fehler beim Wikipedia-Extract nach Softredirect für {final_url}: {sr_error}")
-        # Erst jetzt BeautifulSoup als letzte Notlösung
+                            logging.info(f"Wikipedia extract for fallback URL {fallback_url} erfolgreich geladen.")
+                            return fb_extract, None
+            except Exception as e:
+                logging.error(f"Error retrieving Wikipedia extract for fallback URL {fallback_url}: {e}")
         logging.warning(f"No Wikipedia extract found via API for both URL {wikipedia_url} and fallback. Trying BeautifulSoup...")
         try:
             response = requests.get(wikipedia_url, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
@@ -384,18 +403,46 @@ def get_wikipedia_extract(wikipedia_url, config=None):
                     content = ' '.join(paragraphs[:3])
             if content:
                 logging.info(f"BeautifulSoup: Extract successfully extracted for {wikipedia_url}.")
-                return content
+                return content, None
             else:
                 logging.warning(f"BeautifulSoup: No paragraphs found in content for {wikipedia_url}.")
-                return None
+                # continue to LLM-synonym fallback
         except Exception as bs_error:
             logging.error(f"Error in BeautifulSoup fallback for {wikipedia_url}: {bs_error}")
-            return None
+            # continue to LLM-synonym fallback
     except Exception as e:
-        logging.error("Error retrieving Wikipedia extract for %s: %s", wikipedia_url, e)
-        return None
+        logging.error(f"Error during Wikipedia API and fallback flow for URL {wikipedia_url}: {e}")
+        # continue to LLM-synonym fallback
 
-# Retrieve article categories via MediaWiki API
+    # LLM-Synonym-Fallback nach BeautifulSoup
+    logging.warning(f"No extract via BeautifulSoup; trying LLM-generated synonyms for '{title_plain}'...")
+    synonyms = generate_entity_synonyms(title_plain, language=lang, config=config)
+    for syn in synonyms:
+        try:
+            logging.info(f"Trying fallback for synonym '{syn}'..." )
+            # Single fallback call with priority languages
+            priority_langs = [lang] if lang == 'en' else [lang, 'en']
+            syn_url = fallback_wikipedia_url(syn, langs=priority_langs)
+            if syn_url:
+                parsed_syn = urllib.parse.urlparse(syn_url)
+                syn_lang = parsed_syn.netloc.split('.')[0]
+                syn_title = urllib.parse.unquote(parsed_syn.path.split('/wiki/')[1].split('#')[0])
+                syn_api = f"https://{syn_lang}.wikipedia.org/w/api.php"
+                syn_params = params.copy()
+                syn_params['titles'] = syn_title
+                r_syn = requests.get(syn_api, params=syn_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
+                r_syn.raise_for_status()
+                pages_syn = r_syn.json().get('query', {}).get('pages', {})
+                for page in pages_syn.values():
+                    syn_ext = page.get('extract', '')
+                    if syn_ext:
+                        logging.info(f"Extract for synonym '{syn}' successful.")
+                        return syn_ext, None
+        except Exception as se:
+            logging.error(f"Error retrieving extract for synonym '{syn}': {se}")
+    logging.warning(f"No extract found using LLM-generated synonyms for '{title_plain}'.")
+    return None, None
+
 def get_wikipedia_categories(wikipedia_url, config=None):
     wikipedia_url = sanitize_wikipedia_url(wikipedia_url)
 
@@ -469,7 +516,7 @@ def get_wikipedia_details(wikipedia_url, config=None):
     try:
         params = {
             'action': 'parse',
-            'page': title_plain,
+            'page': title,
             'prop': 'text',
             'format': 'json',
             'section': 0
@@ -494,13 +541,13 @@ def get_wikipedia_details(wikipedia_url, config=None):
         logging.error("Error parsing infobox for %s: %s", wikipedia_url, e)
     # 2. See also links via parse/links
     try:
-        sec_params = {'action': 'parse', 'page': title_plain, 'prop': 'sections', 'format': 'json'}
+        sec_params = {'action': 'parse', 'page': title, 'prop': 'sections', 'format': 'json'}
         rsec = requests.get(endpoint, params=sec_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
         rsec.raise_for_status()
         secs = rsec.json().get('parse', {}).get('sections', [])
         idx = next((s['index'] for s in secs if s.get('line', '').lower() in ('see also', 'siehe auch')), None)
         if idx:
-            link_params = {'action': 'parse', 'page': title_plain, 'prop': 'links', 'format': 'json', 'section': idx}
+            link_params = {'action': 'parse', 'page': title, 'prop': 'links', 'format': 'json', 'section': idx}
             rlink = requests.get(endpoint, params=link_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
             rlink.raise_for_status()
             links = rlink.json().get('parse', {}).get('links', [])
@@ -515,7 +562,7 @@ def get_wikipedia_details(wikipedia_url, config=None):
         logging.error("Error fetching see_also for %s: %s", wikipedia_url, e)
     # 3. Main image via pageimages
     try:
-        img_params = {'action': 'query', 'prop': 'pageimages', 'piprop': 'original', 'titles': title_plain, 'format': 'json'}
+        img_params = {'action': 'query', 'prop': 'pageimages', 'piprop': 'original', 'titles': title, 'format': 'json'}
         rimg = requests.get(endpoint, params=img_params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
         rimg.raise_for_status()
         pages = rimg.json().get('query', {}).get('pages', {})
@@ -542,6 +589,14 @@ def get_wikipedia_summary_and_categories_props(wikipedia_url, config=None):
     """
     if config is None:
         config = DEFAULT_CONFIG
+    # === Wikipedia summary caching ===
+    if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIPEDIA_ENABLED"):
+        cache_path = get_cache_path(config.get("CACHE_DIR", "cache"), "wikipedia", wikipedia_url, suffix="_summary.json")
+        cached = load_cache(cache_path)
+        if cached is not None:
+            logging.debug(f"Loaded Wikipedia summary cache for {wikipedia_url}")
+            return cached
+        
     try:
         parts = wikipedia_url.split('/wiki/')
         if len(parts) < 2:
@@ -582,6 +637,10 @@ def get_wikipedia_summary_and_categories_props(wikipedia_url, config=None):
         }
         wid = result['wikidata_id']
         result['wikidata_url'] = f"https://www.wikidata.org/wiki/{wid}" if wid else None
+        # Save summary cache
+        if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIPEDIA_ENABLED"):
+            save_cache(cache_path, result)
+            logging.debug(f"Saved Wikipedia summary cache for {wikipedia_url}")
         return result
     except Exception as e:
         logging.error("Error fetching wiki summary and categories: %s", e)

@@ -2,8 +2,11 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib import cm, colors as mcolors
 from pyvis.network import Network
 import logging
+import math
+import re
 
 def visualize_graph(result, config):
     """
@@ -48,11 +51,6 @@ def visualize_graph(result, config):
         "concept": "#f0e6ff",
         "work": "#ffe6cc"
     }
-    additional_colors = [
-        "#e6ffff", "#fff2e6", "#ffe6f2", "#f2ffe6",
-        "#e6e6ff", "#ffe6eb", "#e6ffe0", "#e6f5ff"
-    ]
-    color_iter = iter(additional_colors)
 
     def get_entity_type(node):
         for rel in relationships:
@@ -66,30 +64,89 @@ def visualize_graph(result, config):
                 return ent.get("entity_type").lower()
         return ""
 
-    type_fill_colors = {}
+    # Build list of unique types in order encountered
+    unique_types = []
     for node in G.nodes():
         etype = get_entity_type(node)
+        if etype not in unique_types:
+            unique_types.append(etype)
+    # Build mapping: base colors first
+    type_color_map = {}
+    for etype in unique_types:
         if etype in base_colors:
-            type_fill_colors[node] = base_colors[etype]
-        else:
-            try:
-                type_fill_colors[node] = next(color_iter)
-            except StopIteration:
-                type_fill_colors[node] = "#f2f2f2"
+            type_color_map[etype] = base_colors[etype]
+    # Other types via dynamic tab20 colormap
+    other_types = [t for t in unique_types if t not in type_color_map]
+    cmap = cm.get_cmap('tab20', len(other_types) or 1)
+    for idx, etype in enumerate(other_types):
+        type_color_map[etype] = mcolors.to_hex(cmap(idx))
+    # Assign each node its fill color
+    type_fill_colors = {node: type_color_map.get(get_entity_type(node), '#f2f2f2') for node in G.nodes()}
 
     # -- PNG Visualization --
-    pos = nx.spring_layout(G, seed=42)
-    plt.figure(figsize=(8, 6))
+    # Determine layout method and parameters
+    layout_method = config.get("GRAPH_LAYOUT_METHOD", "kamada_kawai")
+    layout_k = config.get("GRAPH_LAYOUT_K")
+    layout_iters = config.get("GRAPH_LAYOUT_ITERATIONS", 50)
+    # Compute positions based on configured layout
+    if layout_method == "spring":
+        pos = nx.spring_layout(G, k=layout_k, iterations=layout_iters)
+    else:
+        pos = nx.kamada_kawai_layout(G)
+    # Scale positions according to GRAPH_PNG_SCALE setting
+    scale = config.get("GRAPH_PNG_SCALE", 0.33)
+    pos = {node: (coords[0] * scale, coords[1] * scale) for node, coords in pos.items()}
+    # Prevent node overlap if enabled
+    if config.get("GRAPH_PHYSICS_PREVENT_OVERLAP", True):
+        nodes = list(pos.keys())
+        min_dist = config.get("GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE", 0.1)
+        for _ in range(config.get("GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS", 50)):
+            moved = False
+            for i in range(len(nodes)):
+                for j in range(i+1, len(nodes)):
+                    n1, n2 = nodes[i], nodes[j]
+                    x1, y1 = pos[n1]
+                    x2, y2 = pos[n2]
+                    dx, dy = x1 - x2, y1 - y2
+                    dist = math.hypot(dx, dy)
+                    if dist < min_dist:
+                        if dist == 0:
+                            dx, dy = 0.01, 0.01
+                            dist = math.hypot(dx, dy)
+                        shift = (min_dist - dist) / 2
+                        ux, uy = dx / dist, dy / dist
+                        pos[n1] = (x1 + ux * shift, y1 + uy * shift)
+                        pos[n2] = (x2 - ux * shift, y2 - uy * shift)
+                        moved = True
+            if not moved:
+                break
+    # Center graph positions by subtracting mean coordinates
+    mean_x = sum(x for x, _ in pos.values()) / len(pos)
+    mean_y = sum(y for _, y in pos.values()) / len(pos)
+    pos = {node: (x - mean_x, y - mean_y) for node, (x, y) in pos.items()}
+    # Static PNG layout with fixed scaling
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_aspect('equal')
     node_colors = [type_fill_colors.get(n, "#f2f2f2") for n in G.nodes()]
-    nx.draw_networkx_nodes(G, pos, node_size=500, node_color=node_colors, edgecolors="#222")
-    nx.draw_networkx_labels(G, pos, font_size=9)
+    nx.draw_networkx_nodes(G, pos, node_size=500, node_color=node_colors, edgecolors="#222", ax=ax)
+    nx.draw_networkx_labels(G, pos, font_size=9, ax=ax)
     edge_styles = [d.get("style", "solid") for _, _, d in G.edges(data=True)]
-    nx.draw_networkx_edges(G, pos, arrows=True, style=edge_styles)
+    nx.draw_networkx_edges(G, pos, arrows=True, style=edge_styles, ax=ax)
     edge_labels = nx.get_edge_attributes(G, "label")
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
-    plt.axis("off")
-    plt.tight_layout()
-    # Legende für PNG (Kanten- und Typfarben)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8, ax=ax)
+    # Set symmetric axis limits to center graph with buffer
+    xs = [coords[0] for coords in pos.values()]
+    ys = [coords[1] for coords in pos.values()]
+    if xs and ys:
+        max_x = max(abs(x) for x in xs)
+        max_y = max(abs(y) for y in ys)
+        max_range = max(max_x, max_y)
+        # Use 15% buffer for more breathing room and to avoid clipping
+        buffer = max_range * 0.15
+        ax.set_xlim(-max_range - buffer, max_range + buffer)
+        ax.set_ylim(-max_range - buffer, max_range + buffer)
+    ax.set_axis_off()
+    # Keine automatische Neuberechnung mehr – statische Achsenlimits nutzen
     legend_elements = [
         Line2D([0], [0], color="#222", lw=2.4, label="Explicit relationship →"),
         Line2D([0], [0], color="#888", lw=2.0, linestyle="dashed", label="Implicit relationship →")
@@ -102,101 +159,47 @@ def visualize_graph(result, config):
             type_color_map[typ] = color
     for typ, color in sorted(type_color_map.items()):
         legend_elements.append(Patch(facecolor=color, edgecolor="#444", label=typ.capitalize()))
-    plt.legend(handles=legend_elements, loc="lower left", fontsize=9, frameon=True, facecolor="white", edgecolor="#aaa")
-    plt.savefig(png_filename, dpi=180)
-    plt.close()
+    # Add legend at figure level (lower-left image corner)
+    fig.legend(handles=legend_elements, loc="lower left",
+               bbox_to_anchor=(0.02, 0.02), bbox_transform=fig.transFigure,
+               fontsize=9, frameon=True, facecolor="white", edgecolor="#aaa")
+    # Remove all subplot margins for maximal drawing area
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    fig.savefig(png_filename, dpi=180)
+    plt.close(fig)
     logging.info(f"Knowledge Graph PNG gespeichert: {png_filename}")
     print(f"Knowledge Graph PNG gespeichert: {png_filename}")
 
-    # -- HTML Visualization (interactive) using same layout as PNG --
-    net = Network(height="800px", width="100%", directed=True, bgcolor="#ffffff", font_color="#222")
-    # Prepare scaled positions with factor 300 and enforce a minimum pixel distance of 150
-    scaled_pos = {node: (pos[node][0] * 300, pos[node][1] * 300) for node in G.nodes()}
-    min_pixel_dist = 150
-    for _ in range(1000):
-        moved = False
-        nodes = list(scaled_pos.keys())
-        for i in range(len(nodes)):
-            for j in range(i+1, len(nodes)):
-                n1, n2 = nodes[i], nodes[j]
-                x1, y1 = scaled_pos[n1]; x2, y2 = scaled_pos[n2]
-                dx, dy = x1 - x2, y1 - y2
-                dist = (dx*dx + dy*dy)**0.5
-                if dist < min_pixel_dist:
-                    if dist == 0:
-                        dx, dy = 0.1, 0.1; dist = 0.1
-                    shift = (min_pixel_dist - dist) / 2
-                    ux, uy = dx/dist, dy/dist
-                    scaled_pos[n1] = (x1 + ux*shift, y1 + uy*shift)
-                    scaled_pos[n2] = (x2 - ux*shift, y2 - uy*shift)
-                    moved = True
-        if not moved:
-            break
-    # Add nodes with computed positions
-    for node, (sx, sy) in scaled_pos.items():
-        net.add_node(
-            node,
-            label=node,
-            color=type_fill_colors.get(node, "#f2f2f2"),
-            x=int(sx),
-            y=int(sy),
-            physics=False
-        )
-    # Add edges with smaller font size for labels
+    # -- HTML Visualization (interactive) using PyVis --
+    net = Network(height="800px", width="100%", directed=True, bgcolor="#ffffff", font_color="#222", notebook=False)
+    # Reuse static positions and invert Y for matching orientation
+    scale_px = config.get("GRAPH_INTERACTIVE_SCALE", 1000)
+    pos_inter = {node: (coords[0] * scale_px, -coords[1] * scale_px) for node, coords in pos.items()}
+    for node in G.nodes():
+        x, y = pos_inter.get(node, (0, 0))
+        net.add_node(node, label=node, color=type_fill_colors.get(node, "#f2f2f2"), x=x, y=y, physics=False)
     for u, v, d in G.edges(data=True):
-        net.add_edge(
-            u,
-            v,
-            label=d.get("label", ""),
-            color="#333",
-            arrows="to",
-            dashes=(d.get("style") == "dashed"),
-            font={"size": 10}
-        )
-    # Erzeuge interaktive HTML inkl. Legende und Steuerung
-    try:
-        html_string = net.generate_html()
-        # HTML-Legende erstellen
-        legend_html = '<div style="padding:8px; background:#f9f9f9; border:1px solid #ddd; margin:0 auto 8px auto; border-radius:5px; font-size:12px; max-width:800px; text-align:center;">'
-        legend_html += '<h4 style="margin-top:0; margin-bottom:5px;">Knowledge Graph</h4>'
-        legend_html += '<div style="margin:5px 0"><b>Entity Types:</b> '
-        for typ, color in sorted(type_color_map.items()):
-            legend_html += f'<span style="background:{color};border:1px solid #444;padding:1px 4px;margin-right:4px;display:inline-block;font-size:11px;">{typ.capitalize()}</span>'
-        legend_html += '</div>'
-        legend_html += '<div style="margin:5px 0"><b>Relationships:</b> '
-        legend_html += '<span style="border-bottom:1px solid #333;padding:1px 4px;margin-right:5px;display:inline-block;font-size:11px;">Explicit</span>'
-        legend_html += '<span style="border-bottom:1px dashed #555;padding:1px 4px;display:inline-block;font-size:11px;">Implicit</span>'
-        legend_html += '</div>'
-        legend_html += '<div style="margin-top:5px;">'
-        legend_html += '<button onclick="stabilize()" style="margin-right:3px;padding:2px 5px;font-size:11px;">Stabilisieren</button>'
-        legend_html += '<button onclick="togglePhysics()" style="margin-right:3px;padding:2px 5px;font-size:11px;">Physik</button>'
-        legend_html += '<button onclick="fitNetwork()" style="padding:2px 5px;font-size:11px;">Zoom</button>'
-        legend_html += '</div></div>'
-        # JavaScript-Steuerungscode
-        js_code = '''
-<script type="text/javascript">
-function stabilize() { network.stabilize(100); }
-function togglePhysics() {
-    var options = network.physics.options;
-    options.enabled = !options.enabled;
-    network.setOptions({ physics: options });
-}
-function fitNetwork() { network.fit(); }
-network.on("hoverNode", function(params) { /* Highlight-Logik */ });
-network.on("blurNode", function(params) { /* Rücksetzen */ });
-</script>
-'''
-        # Legende und JS in HTML einfügen
-        if '<body>' in html_string:
-            parts = html_string.split('<body>')
-            html_string = parts[0] + '<body>\n' + legend_html + '\n' + parts[1]
-        if '</body>' in html_string:
-            html_string = html_string.replace('</body>', js_code + '\n</body>')
-        # Speichern
-        with open(html_filename, "w", encoding="utf-8") as f:
-            f.write(html_string)
-        logging.info(f"Interaktive Knowledge Graph HTML gespeichert: {html_filename}")
-        print(f"Interaktive Knowledge Graph HTML gespeichert: {html_filename}")
-    except Exception as e:
-        logging.error(f"Fehler beim Generieren der interaktiven HTML-Visualisierung: {e}")
+        net.add_edge(u, v, label=d.get("label", ""), color="#333", arrows="to",
+                     dashes=(d.get("style") == "dashed"), font={"size": 10}, smooth=False)
+    # Save interactive HTML directly
+    net.write_html(html_filename)
+    # Inject HTML-Legende am Seitenanfang
+    legend_html = '<div style="padding:8px; background:#f9f9f9; border:1px solid #ddd; margin:0 auto 8px auto; border-radius:5px; font-size:12px; max-width:800px; text-align:center;">'
+    legend_html += '<h4 style="margin-top:0; margin-bottom:5px;">Knowledge Graph</h4>'
+    legend_html += '<div style="margin:5px 0"><b>Entity Types:</b> '
+    for typ, color in sorted(type_color_map.items()):
+        legend_html += f'<span style="background:{color};border:1px solid #444;padding:1px 4px;margin-right:4px;display:inline-block;font-size:11px;">{typ.capitalize()}</span>'
+    legend_html += '</div>'
+    legend_html += '<div style="margin:5px 0"><b>Relationships:</b> '
+    legend_html += '<span style="border-bottom:1px solid #333;padding:1px 4px;margin-right:5px;display:inline-block;font-size:11px;">Explicit</span>'
+    legend_html += '<span style="border-bottom:1px dashed #555;padding:1px 4px;display:inline-block;font-size:11px;">Implicit</span>'
+    legend_html += '</div></div>'
+    with open(html_filename, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    if '<body>' in html_content:
+        html_content = html_content.replace('<body>', '<body>\n' + legend_html + '\n')
+    with open(html_filename, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    logging.info(f"Interaktive Knowledge Graph HTML gespeichert: {html_filename}")
+    print(f"Interaktive Knowledge Graph HTML gespeichert: {html_filename}")
     return {"png": png_filename, "html": html_filename}

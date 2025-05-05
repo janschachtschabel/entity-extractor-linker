@@ -12,9 +12,9 @@ import json, logging, sys
 sys.stdout.reconfigure(encoding='utf-8')
 logging.basicConfig(level=logging.INFO)
 
-base_text = """Die Energiewende in Deutschland hat in den letzten Jahren erhebliche Fortschritte gemacht. Städte wie Berlin und München setzen verstärkt auf Solarenergie, Windkraft und Biomasse. Unternehmen wie Siemens, RWE und E.ON investieren in neue Technologien. Internationale Abkommen wie das Pariser Klimaabkommen von 2015 sowie der Kyoto-Protokoll-Rahmen spielen eine entscheidende Rolle. Der Intergovernmental Panel on Climate Change (IPCC) veröffentlicht regelmäßig Berichte über die Erderwärmung. Bundesministerien und Forschungseinrichtungen wie das Fraunhofer-Institut und das Deutsche Zentrum für Luft- und Raumfahrt (DLR) arbeiten an innovativen Lösungen. Das Bundesministerium für Wirtschaft und Energie (BMWi) fördert darüber hinaus Forschungsprojekte zur Dekarbonisierung. """
-
-text = base_text * 7  # ergibt ca. 5400 Zeichen
+text = """Seit den frühen 1990er Jahren verfolgt Deutschland das Ziel, seine Energieversorgung grundlegend zu transformieren. Die Energiewende hat das übergeordnete Ziel, den Ausstoß von Treibhausgasen zu reduzieren und zugleich die Versorgungssicherheit zu gewährleisten. Dabei spielen erneuerbare Energien wie Windkraft, Photovoltaik und Biomasse eine zentrale Rolle. Technische Innovationen in Speichertechnologien und intelligenten Netzen ermöglichen eine immer effizientere Integration fluktuierender Stromquellen. Forschungsinstitute wie das Fraunhofer ISE und das Deutsche Zentrum für Luft- und Raumfahrt (DLR) treiben die Entwicklung von Hochleistungsspeichern und Microgrid-Lösungen voran. Politische und wirtschaftliche Rahmenbedingungen, darunter das Erneuerbare-Energien-Gesetz (EEG), schaffen Anreize für Investitionen in saubere Technologien.
+Auf gesellschaftlicher Ebene fördert die Bundesregierung über Programme wie den Klimaschutzplan 2050 die Akzeptanz von Energieeffizienzmaßnahmen und Elektromobilität. Kommunale Energieversorger und Stadtwerke investieren in Ladeinfrastruktur für Elektrofahrzeugen und entwickeln integrierte Konzepte zur Sektorkopplung. Die Kosten für erneuerbare Anlagen sind in den letzten Jahren erheblich gesunken, wodurch Investitionen für private Haushalte und Unternehmen attraktiver geworden sind. Gleichzeitig erfordert die Umstellung auf erneuerbare Energien Anpassungen im Netzbetrieb und Flexibilitätsmarkt. Digitale Plattformen zur Steuerung von Verbrauchern und Prosumer-Modellen gewinnen an Bedeutung und ermöglichen eine dynamische Bilanzierung von Einspeisung und Verbrauch. Marktmechanismen wie Redispatch 2.0 und Kapazitätsmärkte stellen sicher, dass Netzausbau und Betrieb auch bei hoher Volatilität stabil bleiben.
+Im internationalen Kontext kooperiert Deutschland im Rahmen der EU-Klimapolitik und globaler Klimaabkommen wie dem Pariser Abkommen, um verbindliche Emissionssenkungen zu vereinbaren. Technologietransfer und gemeinsame Forschungsprojekte mit Partnern in Nordamerika, Asien und Afrika fördern den weltweiten Ausbau sauberer Energien. Die Rolle von grünem Wasserstoff als Energiespeicher und Transformationsmedium gewinnt zunehmend an Bedeutung, da er in der Industrie und im Schwerlastverkehr fossile Brennstoffe ersetzen kann. Pilotprojekte in Schleswig-Holstein und Bayern untersuchen die Machbarkeit von Sektorenkopplung mit Wasserstoffspeichern. Langfristig zielt die Bundesrepublik darauf ab, eine klimaneutrale Wirtschaft zu erreichen und gleichzeitig die wirtschaftliche Wettbewerbsfähigkeit zu erhalten. Die Herausforderung liegt darin, technologische, regulatorische und soziale Aspekte in Einklang zu bringen, um das Ziel einer nachhaltigen Energieversorgung zu realisieren."""
 
 config = {
     # === LLM Provider Parameters ===
@@ -78,12 +78,14 @@ print("-" * 100)
 print(f"{'Nr':3} | {'Name':25} | {'Typ':15} | {'Inferred':10} | {'Wikipedia':25} | {'Wikidata':15} | {'DBpedia':20}")
 print("-" * 100)
 for i, entity in enumerate(entities, start=1):
-    name = entity.get("name", entity.get("entity", ""))[:25]
-    etype = entity.get("type", entity.get("entity_type", ""))[:15]
-    inferred = entity.get("inferred", "")[:10]
-    wiki = entity.get("wikipedia_url", "")[:25]
-    wikidata = entity.get("wikidata_id", "")[:15]
-    dbpedia = entity.get("dbpedia_uri", "")[:20]
+    name = entity.get("entity", "")[:25]
+    details = entity.get("details", {})
+    etype = details.get("typ", "")[:15]
+    inferred = details.get("inferred", "")[:10]
+    sources = entity.get("sources", {})
+    wiki = sources.get("wikipedia", {}).get("url", "")[:25]
+    wikidata = sources.get("wikidata", {}).get("id", "")[:15]
+    dbpedia = sources.get("dbpedia", {}).get("url", "")[:20]
     print(f"{i:3} | {name:25} | {etype:15} | {inferred:10} | {wiki:25} | {wikidata:15} | {dbpedia:20}")
 print("-" * 100)
 print(f"Insgesamt {len(entities)} Entitäten gefunden.")
@@ -94,7 +96,7 @@ if relationships:
     implicit = [r for r in relationships if r.get("inferred") == "implicit"]
 
     # Map Entity-Namen auf Entity-Inferenzstatus
-    entity_inf_map = {ent.get("name", ent.get("entity", "")): ent.get("inferred", "") for ent in entities}
+    entity_inf_map = {ent.get("entity", ""): ent.get("details", {}).get("inferred", "") for ent in entities}
 
     print("\nExplizite Beziehungen:")
     print("-" * 140)

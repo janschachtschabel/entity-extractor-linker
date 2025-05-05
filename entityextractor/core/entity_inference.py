@@ -9,6 +9,12 @@ import time
 from openai import OpenAI
 from entityextractor.config.settings import get_config, DEFAULT_CONFIG
 from entityextractor.utils.logging_utils import configure_logging
+from entityextractor.prompts.entity_inference_prompts import (
+    get_system_prompt_entity_inference_en,
+    get_user_prompt_entity_inference_en,
+    get_system_prompt_entity_inference_de,
+    get_user_prompt_entity_inference_de,
+)
 
 # Default-Konfiguration
 DEFAULT_CONFIG = {
@@ -52,52 +58,13 @@ def infer_entities(text, entities, user_config=None):
     logging.info("Entity Inference aktiviert: Erzeuge implizite Entitäten via LLM...")
     # Vorbereitung Prompt
     language = config.get("LANGUAGE", DEFAULT_CONFIG["LANGUAGE"])
-    # Anzahl impliziter Entitäten begrenzen
     max_entities = config.get("MAX_ENTITIES", len(explicit))
-    if language == "en":
-        # EN Prompt: nur implizite Entitäten ergänzen
-        system_prompt = f"""
-        You are an AI assistant tasked with enriching an existing entity list by adding only implicit entities to logically complete the knowledge network.
-        Do NOT include any of the provided entities.
-        Generate exactly {max_entities} new entities.
-
-        Output a JSON array of objects with these fields:
-        - entity
-        - entity_type
-        - wikipedia_url
-        - inferred (set to "implicit")
-        - citation (set to "generated")
-        """
-        user_msg = f"""
-        Topic/Text: {text}
-
-        Existing entities:
-        {json.dumps(explicit, indent=2, ensure_ascii=False)}
-
-        Supplement the list by adding exactly {max_entities} new implicit entities that logically complete the network.
-        """
+    if language == "de":
+        system_prompt = get_system_prompt_entity_inference_de(max_entities)
+        user_msg = get_user_prompt_entity_inference_de(text, explicit, max_entities)
     else:
-        # DE Prompt: nur implizite Entitäten ergänzen
-        system_prompt = f"""
-        Du bist ein KI-Assistent, der eine vorhandene Entitätenliste anreichert, indem er ausschließlich implizite Entitäten ergänzt, um das Wissensnetz logisch zu vervollständigen.
-        Wiederhole keine der bereits vorhandenen Entitäten.
-        Generiere genau {max_entities} neue Entitäten.
-
-        Gib ein JSON-Array mit Objekten zurück, die folgende Felder enthalten:
-        - entity
-        - entity_type
-        - wikipedia_url
-        - inferred (set to "implicit")
-        - citation (setze auf "generated")
-        """
-        user_msg = f"""
-        Thema/Text: {text}
-
-        Vorhandene Entitäten:
-        {json.dumps(explicit, indent=2, ensure_ascii=False)}
-
-        Ergänze genau {max_entities} neue implizite Entitäten, die das Netzwerk logisch vervollständigen.
-        """
+        system_prompt = get_system_prompt_entity_inference_en(max_entities)
+        user_msg = get_user_prompt_entity_inference_en(text, explicit, max_entities)
     # API-Aufruf
     logging.info(f"Rufe OpenAI API für implizite Entitäten auf (Modell {config.get('MODEL', DEFAULT_CONFIG['MODEL'])})...")
     client = OpenAI(api_key=config.get("OPENAI_API_KEY"))

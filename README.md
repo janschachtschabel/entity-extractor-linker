@@ -133,6 +133,19 @@ Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt. Alle
 | `ENABLE_KGC` | bool | `False` | Aktiviert nach der Extraktion einen Knowledge Graph Completion-Schritt zur Vervollständigung impliziter Beziehungen. |
 | `KGC_ROUNDS` | int | `3` | Anzahl der Iterationen für die Knowledge Graph Completion (Wert zwischen 1 und 100). |
 | `ENABLE_GRAPH_VISUALIZATION` | bool | `False` | Aktiviert die Ausgabe des Knowledge Graph als PNG und HTML (erfordert RELATION_EXTRACTION=True). |
+| `GRAPH_LAYOUT_METHOD` | string | `"kamada_kawai"` | Layoutmethode für das statische PNG: "kamada_kawai" oder "spring". |
+| `GRAPH_LAYOUT_K` | float or None | `None` | Ideale Kantenlänge im Spring-Layout (nur bei `spring`). |
+| `GRAPH_LAYOUT_ITERATIONS` | int | `100` | Iterationen im Spring-Layout (nur bei `spring`). |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP` | bool | `True` | Überlappungsprävention im Spring-Layout aktivieren (nur bei `spring`). |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE` | float | `0.1` | Mindestabstand für Überlappungsprävention (nur bei `spring`). |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS` | int | `50` | Iterationen für Überlappungsprävention (nur bei `spring`). |
+| `GRAPH_PNG_SCALE` | float | `0.33` | Skalierungsfaktor für statisches PNG-Layout (Standard 0.33). |
+| `GRAPH_HTML_INITIAL_SCALE` | int | `10` | Anfangs-Zoom im interaktiven HTML-Graph (network.moveTo scale). |
+| `CACHE_ENABLED` | bool | `True` | Aktiviert globales Caching für alle Abfragen und Ergebnisse. |
+| `CACHE_DIR` | string | `./cache` | Verzeichnis für Cache-Dateien (Wikipedia, Wikidata, DBpedia). |
+| `CACHE_WIKIPEDIA_ENABLED` | bool | `True` | Cache für Wikipedia-API-Antworten aktivieren. |
+| `CACHE_WIKIDATA_ENABLED` | bool | `True` | Cache für Wikidata-API-Antworten aktivieren. |
+| `CACHE_DBPEDIA_ENABLED` | bool | `True` | Cache für DBpedia SPARQL-Abfragen aktivieren. |
 
 ### Beispiel-Konfiguration
 
@@ -145,6 +158,9 @@ config = {
     "USE_DBPEDIA": True        # DBpedia-Integration aktivieren
 }
 ```
+
+### Hinweis:
+Sie müssen nicht alle Konfigurationsparameter angeben – nur jene, die von den Standardwerten in `config/settings.py` abweichen.
 
 ## Verwendung
 

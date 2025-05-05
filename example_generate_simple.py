@@ -25,7 +25,10 @@ config = {
     "USE_WIKIDATA": True,     # Wikidata-Verknüpfung aktivieren
     "USE_DBPEDIA": True,      # DBpedia-Verknüpfung aktivieren
     "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
-    "ADDITIONAL_DETAILS": True,  # Zusätzliche Entitätsdetails abrufen
+    "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
+    "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
+    "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
+    "ADDITIONAL_DETAILS": False,  # Zusätzliche Entitätsdetails abrufen
     "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
     # === ENTITY EXTRACTION PARAMETERS ===
@@ -54,7 +57,7 @@ config = {
     "KGC_ROUNDS": 3,           # Anzahl KGC-Runden
 
     # === GRAPH-VISUALISIERUNG ===
-    "ENABLE_GRAPH_VISUALIZATION": False    # Graph-Visualisierung aktivieren
+    "ENABLE_GRAPH_VISUALIZATION": True    # Graph-Visualisierung aktivieren
 }
 
 result = process_entities(topic, config)

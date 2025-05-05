@@ -12,6 +12,28 @@ from openai import OpenAI
 from entityextractor.config.settings import get_config
 from entityextractor.utils.logging_utils import configure_logging
 from entityextractor.services.openai_service import save_relationship_training_data
+from entityextractor.prompts.relationship_prompts import (
+    get_explicit_system_prompt_extract_en,
+    get_explicit_user_prompt_extract_en,
+    get_explicit_system_prompt_extract_de,
+    get_explicit_user_prompt_extract_de,
+    get_explicit_system_prompt_all_en,
+    get_explicit_user_prompt_all_en,
+    get_explicit_system_prompt_all_de,
+    get_explicit_user_prompt_all_de,
+    get_implicit_system_prompt_en,
+    get_implicit_user_prompt_en,
+    get_implicit_system_prompt_de,
+    get_implicit_user_prompt_de,
+    get_kgc_system_prompt_en,
+    get_kgc_user_prompt_en,
+    get_kgc_system_prompt_de,
+    get_kgc_user_prompt_de,
+    get_system_prompt_dedup_relationship_en,
+    get_user_prompt_dedup_relationship_en,
+    get_system_prompt_dedup_relationship_de,
+    get_user_prompt_dedup_relationship_de
+)
 
 # Standardkonfiguration
 DEFAULT_CONFIG = {
@@ -118,39 +140,15 @@ def infer_entity_relationships(text, entities, user_config=None):
 
     # KGC-Modus: nur neue implizite Beziehungen basierend auf bestehenden generieren
     existing_rels = config.get("existing_relationships")
-    if config.get("enable_kgc", False) and existing_rels is not None:
+    allowed_entities = {e.get("entity") or e.get("name", "") for e in entities}
+    if config.get("ENABLE_KGC", False) and existing_rels is not None:
         logging.info(f"Starte Knowledge Graph Completion-Inferenz: {len(existing_rels)} bestehende Beziehungen")
-        # System- und User-Prompt für KGC
         if language == "en":
-            system_prompt = (
-                "You are a knowledge graph completion assistant. Only generate new implicit relationships between the provided entities; do not invent any new entities."
-            )
-            user_msg = f"""
-Text: ```{text}```
-
-Entities:
-{json.dumps(entity_info, indent=2)}
-
-Existing relationships:
-{json.dumps(existing_rels, indent=2)}
-
-Identify additional IMPLICIT relationships between these entities that are not in the existing list, to logically complete the graph. Use only the provided entities as subject and object; do not introduce any other entities. Set inferred="implizit".  
-"""
+            system_prompt = get_kgc_system_prompt_en()
+            user_msg = get_kgc_user_prompt_en(text, entity_info, existing_rels)
         else:
-            system_prompt = (
-                "Du bist ein Knowledge-Graph-Completion-Assistent. Erzeuge nur neue implizite Beziehungen zwischen den unten aufgeführten Entitäten; erfinde keine neuen Entitäten. Erzeuge KEINE Beziehungen, die inhaltlich oder semantisch bereits durch bestehende Beziehungen abgedeckt sind, auch wenn die Formulierung abweicht."
-            )
-            user_msg = f"""
-Text: ```{text}```
-
-Entitäten:
-{json.dumps(entity_info, indent=2)}
-
-Bestehende Beziehungen:
-{json.dumps(existing_rels, indent=2)}
-
-Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nicht existieren und auch nicht inhaltlich/semantisch bereits durch bestehende Beziehungen abgedeckt sind (auch nicht mit anderer Formulierung), um den Graph logisch zu vervollständigen. Nutze ausschließlich die angegebenen Entitäten als Subjekt und Objekt; erfinde keine neuen Entitäten. Setze inferred="implizit".  
-"""
+            system_prompt = get_kgc_system_prompt_de()
+            user_msg = get_kgc_user_prompt_de(text, entity_info, existing_rels)
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -166,138 +164,51 @@ Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nich
         existing_keys = {(r["subject"], r["predicate"], r["object"]) for r in existing_rels}
         valid_new = []
         for rel in new_rels:
-            k = (rel.get("subject"), rel.get("predicate"), rel.get("object"))
-            if k not in existing_keys and all(k2 in rel for k2 in ("subject","predicate","object")):
-                rel["inferred"] = "implicit"
-                rel["subject_type"] = entity_type_map.get(rel["subject"], "")
-                rel["object_type"] = entity_type_map.get(rel["object"], "")
+            subj = rel.get("subject")
+            obj = rel.get("object")
+            k = (subj, rel.get("predicate"), obj)
+            # Nur neue, vollständige Tripel und bekannte Entitäten
+            if k not in existing_keys and subj in allowed_entities and obj in allowed_entities \
+               and all(key in rel for key in ("subject", "predicate", "object")):
+                rel.update({
+                    "inferred": "implicit",
+                    "subject_type": entity_type_map.get(subj, ""),
+                    "object_type": entity_type_map.get(obj, "")
+                })
                 valid_new.append(rel)
         return valid_new
 
     # Prompt-Logik für explizite und ggf. (implizite) Beziehungen
-    enable_inference = config.get("ENABLE_RELATIONS_INFERENCE", False)
-    
     # Modus des ersten Prompts: extract vs generate
     mode = config.get("MODE", "extract")
+    # Implizite Beziehungen aktivieren in 'generate'/'compendium'-Modus oder wenn explizit gesetzt
+    enable_inference = config.get("ENABLE_RELATIONS_INFERENCE", False) and mode in ("generate", "compendium")
     
-    # Primärer Prompt: Im generate- oder compendium-Modus explizit+implizit, sonst nur explizit
+    # Primärer Prompt: extract vs generate/compendium
+    # Unified extract-first prompt
     if mode in ("generate", "compendium"):
-        # Unified first prompt for generate and compendium (match implicit prompt style)
+        # All relationships mode
         if language == "en":
-            system_prompt_explicit = """
-            You are an advanced AI system specialized in knowledge graph extraction and enrichment. Think deeply before answering.
-            
-            Your task:
-            Based on the provided text and entity list, extract ALL relationships (explicit and implicit) between these entities. Do NOT invent new entities.
-            
-            The entity list is provided and you MUST use only these entities for subject and object.
-            
-            Rules:
-            - Predicates MUST be 1-3 words maximum. Keep them lowercase.
-            
-            Output Requirements:
-            - Return only a JSON array of objects with keys: "subject", "predicate", "object", and "inferred" ("explicit" or "implicit").
-            """
+            system_prompt_explicit = get_explicit_system_prompt_all_en()
+            user_msg_explicit = get_explicit_user_prompt_all_en(text, entity_info)
         else:
-            system_prompt_explicit = """
-            Du bist ein fortschrittliches KI-System zur Extraktion und Anreicherung von Wissensgraphen. Denke vor der Antwort gründlich nach.
-            
-            Deine Aufgabe:
-            Basierend auf dem gegebenen Text und der Entitätenliste extrahiere ALLE Beziehungen (explizit und implizit) zwischen diesen Entitäten. Erfinde keine neuen Entitäten.
-            
-            Die Entitätenliste ist gegeben und du DARFST nur diese Entitäten als Subjekt und Objekt verwenden.
-            
-            Regeln:
-            - Prädikate MÜSSEN maximal 1-3 Wörter lang sein. Schreibe sie in Kleinbuchstaben.
-            
-            Ausgabeanforderungen:
-            - Gib nur ein JSON-Array mit Objekten zurück, die "subject", "predicate", "object" und "inferred" ("explicit" oder "implicit") enthalten.
-            """
-        # Benutzernachricht für erste Beziehungen
-        if language == "en":
-            user_msg_explicit = f"""
-            Topic: {text}
-
-            Entities:
-            {json.dumps(entity_info, indent=2)}
-
-            Generate logical relationship triples (subject, predicate, object) among these entities relevant to this topic. For each triple, set inferred="implicit".
-            """
-        else:
-            user_msg_explicit = f"""
-            Thema: {text}
-
-            Entitäten:
-            {json.dumps(entity_info, indent=2)}
-
-            Generiere logische Beziehungstripel (Subjekt, Prädikat, Objekt) zwischen diesen Entitäten passend zum Thema. Setze inferred="implicit" für jedes Tripel.
-            """
+            system_prompt_explicit = get_explicit_system_prompt_all_de()
+            user_msg_explicit = get_explicit_user_prompt_all_de(text, entity_info)
     else:
-        # --- Schritt 1: Nur explizite Beziehungen extrahieren ---
+        # Explicit-only mode
         if language == "en":
-            system_prompt_explicit = """
-            You are an advanced AI system specialized in knowledge extraction and knowledge graph generation. Think deeply before answering and provide a thorough, comprehensive response.
-            Your expertise includes identifying consistent entity references and meaningful relationships in text.
-
-            Your task:
-            Extract ONLY explicit (directly mentioned in the text) relationships between the provided entities. Do NOT infer or add any relationships that are not directly stated in the text.
-
-            The entity list is provided and you MUST use only these entities for subject and object. Do NOT invent or add new entities.
-
-            Rules:
-            - Entity Consistency: Use ONLY the provided entity names consistently.
-            - CRITICAL: Both subject and object MUST be from the provided entity list. DO NOT create new entities.
-            - Pairwise Relationships: Create one triple for each pair of entities from the provided list that has a meaningful relationship.
-            - CRITICAL INSTRUCTION: Predicates MUST be 1-3 words maximum. Never more than 3 words. Keep them extremely concise.
-            - IMPORTANT: Only make the predicate (P) lower-case. Subject (S) and Object (O) should maintain their original capitalization as provided in the entity names, especially for proper nouns, names of people, places, etc.
-            - Only extract relationships that are explicitly stated in the text.
-
-            Output Requirements:
-            - Return only the JSON array, with each triple as an object containing "subject", "predicate", "object", and "inferred" (always set to "explicit").
-            - Make sure the JSON is valid and properly formatted.
-            """
+            system_prompt_explicit = get_explicit_system_prompt_extract_en()
+            user_msg_explicit = get_explicit_user_prompt_extract_en(text, entity_info)
         else:
-            system_prompt_explicit = """
-            Du bist ein fortschrittliches KI-System, das auf Wissensextraktion und Wissensgraphgenerierung spezialisiert ist. Denke vor der Antwort gründlich nach und antworte besonders vollständig und sorgfältig.
-            Deine Aufgabe:
-            Extrahiere NUR explizite (direkt im Text genannte) Beziehungen zwischen den bereitgestellten Entitäten. Schließe KEINE Beziehungen ein, die nicht direkt im Text genannt werden.
+            system_prompt_explicit = get_explicit_system_prompt_extract_de()
+            user_msg_explicit = get_explicit_user_prompt_extract_de(text, entity_info)
 
-            Die Entitätenliste ist gegeben und du DARFST nur diese Entitäten als Subjekt und Objekt verwenden. Erfinde oder ergänze KEINE neuen Entitäten.
+    # Log the model being used
+    logging.info(f"Rufe OpenAI API für explizite Beziehungen auf (Modell {model})...")
+    logging.debug(f"[REL_EXP] SYSTEM PROMPT:\n{system_prompt_explicit}")
+    logging.debug(f"[REL_EXP] USER MSG:\n{user_msg_explicit}")
 
-            Regeln:
-            - Entitätskonsistenz: Verwende NUR die bereitgestellten Entitätsnamen konsistent.
-            - KRITISCH: Sowohl Subjekt als auch Objekt MÜSSEN aus der bereitgestellten Entitätsliste stammen. Erfinde KEINE neuen Entitäten.
-            - Paarweise Beziehungen: Erstelle ein Tripel für jedes Paar von Entitäten aus der bereitgestellten Liste, das eine bedeutungsvolle Beziehung hat.
-            - WICHTIGE ANWEISUNG: Prädikate MÜSSEN maximal 1-3 Wörter lang sein. Niemals mehr als 3 Wörter. Halte sie äußerst prägnant.
-            - WICHTIG: Schreibe nur das Prädikat (P) in Kleinbuchstaben. Subjekt (S) und Objekt (O) sollten ihre ursprüngliche Groß-/Kleinschreibung beibehalten.
-
-            Ausgabeanforderungen:
-            - Gib nur das JSON-Array zurück, wobei jedes Tripel ein Objekt ist, das "subject", "predicate", "object" und "inferred" ("explicit") enthält.
-            - Stelle sicher, dass das JSON gültig und korrekt formatiert ist.
-            """
-        # Benutzernachricht für explizite Beziehungen
-        if language == "en":
-            user_msg_explicit = f"""
-            Text: ```{text}```
-
-            Entities:
-            {json.dumps(entity_info, indent=2)}
-
-            Identify all EXPLICIT relationships between these entities in the text. For each relationship, set inferred="explicit".
-            """
-        else:
-            user_msg_explicit = f"""
-            Text: ```{text}```
-
-            Entitäten:
-            {json.dumps(entity_info, indent=2)}
-
-            Identifiziere alle EXPLIZITEN Beziehungen zwischen diesen Entitäten im Text. Setze für jede Beziehung inferred="explicit".
-            """
-    
-    # --- Prompt 1: Explizite Beziehungen ---
     try:
-        logging.info(f"Rufe OpenAI API für explizite Beziehungen auf (Modell {model})...")
         response_explicit = client.chat.completions.create(
             model=model,
             messages=[
@@ -331,64 +242,17 @@ Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nich
         if not enable_inference:
             return valid_relationships_explicit
 
-        # --- Schritt 2: Implizite Beziehungen ergänzen (Prompt 2) ---
-        if language == "en":
-            system_prompt_implicit = """
-            You are an advanced AI system specialized in knowledge graph enrichment. Think deeply before answering.
-
-            Your task:
-            Based on the provided text, entity list, and the already extracted EXPLICIT relationships, identify and add all additional IMPLICIT (inferred, background knowledge) relationships between the entities. DO NOT repeat any relationship already present in the explicit list. Only add new, implicit relationships.
-
-            The entity list is provided and you MUST use only these entities for subject and object. Do NOT invent or add new entities.
-
-            Rules:
-            - Predicates MUST be 1-3 words maximum. Keep them lowercase.
-
-            Output Requirements:
-            - Return only the JSON array, with each triple as an object containing "subject", "predicate", "object", and "inferred" (always set to "implicit").
-            - Make sure the JSON is valid and properly formatted.
-            """
+        # Implizite Beziehungen (falls enabled)
+        if enable_inference:
+            if language == "en":
+                system_prompt_implicit = get_implicit_system_prompt_en()
+                user_msg_implicit = get_implicit_user_prompt_en(text, entity_info, valid_relationships_explicit)
+            else:
+                system_prompt_implicit = get_implicit_system_prompt_de()
+                user_msg_implicit = get_implicit_user_prompt_de(text, entity_info, valid_relationships_explicit)
         else:
-            system_prompt_implicit = """
-            Du bist ein KI-System zur Anreicherung von Wissensgraphen.
-            Deine Aufgabe:
-            Ergänze auf Basis des Textes, der Entitäten und der bereits extrahierten EXPLIZITEN Beziehungen alle weiteren IMPLIZITEN (aus dem Kontext abgeleiteten) Beziehungen zwischen den Entitäten. Gib KEINE Beziehungen zurück, die bereits in der expliziten Liste enthalten sind. Ergänze nur neue, implizite Beziehungen.
-
-            Die Entitätenliste ist gegeben und du DARFST nur diese Entitäten als Subjekt und Objekt verwenden. Erfinde oder ergänze KEINE neuen Entitäten.
-
-            Regeln:
-            - Prädikate MÜSSEN maximal 1-3 Wörter lang sein. Schreibe sie in Kleinbuchstaben.
-
-            Ausgabeanforderungen:
-            - Gib nur das JSON-Array zurück, wobei jedes Tripel ein Objekt ist, das "subject", "predicate", "object" und "inferred" ("implicit") enthält.
-            - Stelle sicher, dass das JSON gültig und korrekt formatiert ist.
-            """
-
-        # Benutzernachricht für implizite Beziehungen
-        if language == "en":
-            user_msg_implicit = f"""
-            Text: ```{text}```
-
-            Entities:
-            {json.dumps(entity_info, indent=2)}
-
-            Explicit relationships (do NOT repeat these):
-            {json.dumps(valid_relationships_explicit, indent=2)}
-
-            Identify all additional IMPLICIT relationships between these entities in the text. For each, set inferred="implicit".
-            """
-        else:
-            user_msg_implicit = f"""
-            Text: ```{text}```
-
-            Entitäten:
-            {json.dumps(entity_info, indent=2)}
-
-            Explizite Beziehungen (NICHT erneut ausgeben):
-            {json.dumps(valid_relationships_explicit, indent=2)}
-
-            Ergänze alle weiteren IMPLIZITEN Beziehungen zwischen diesen Entitäten. Setze für jede Beziehung inferred="implicit".
-            """
+            system_prompt_implicit = None
+            user_msg_implicit = None
 
         logging.info(f"Rufe OpenAI API für implizite Beziehungen auf (Modell {model})...")
         response_implicit = client.chat.completions.create(
@@ -438,27 +302,18 @@ Ergänze weitere IMPLIZITE Beziehungen zwischen diesen Entitäten, die noch nich
             if len(rels) == 1:
                 deduped_result.append(rels[0])
                 continue
-            # LLM-Prompt für dieses Paar
+            # Prepare deduplication prompts
             prompt_rels = [
                 {"predicate": r["predicate"], "inferred": r.get("inferred", "explicit")} for r in rels
             ]
             lang = config.get("LANGUAGE", "de")
+            prompt_rels_json = json.dumps(prompt_rels, ensure_ascii=False)
             if lang == "en":
-                user_prompt = (
-                    f"For the following relationships between subject and object, remove duplicates or very similar predicates. "
-                    f"Prefer explicit relationships over implicit ones if meaning is similar. Do not change any other fields. "
-                    f"Subject: '{subj}', Object: '{obj}', Relationships: {json.dumps(prompt_rels, ensure_ascii=False)}. "
-                    f"Return a JSON array of unique relationships with their predicates and inferred fields."
-                )
-                system_prompt = "You are a helpful assistant for deduplicating knowledge graph relationships."
+                system_prompt = get_system_prompt_dedup_relationship_en()
+                user_prompt = get_user_prompt_dedup_relationship_en(subj, obj, prompt_rels_json)
             else:
-                user_prompt = (
-                    f"Für die folgenden Beziehungen zwischen Subjekt und Objekt entferne Duplikate oder sehr ähnliche Prädikate. "
-                    f"Bevorzuge explizite Beziehungen gegenüber impliziten, falls die Bedeutung ähnlich ist. Keine anderen Felder verändern! "
-                    f"Subjekt: '{subj}', Objekt: '{obj}', Beziehungen: {json.dumps(prompt_rels, ensure_ascii=False)}. "
-                    f"Gib ein JSON-Array der einmaligen Beziehungen mit Prädikat und inferred-Feld zurück."
-                )
-                system_prompt = "Du bist ein hilfreicher Assistent zur Bereinigung von Knowledge-Graph-Beziehungen."
+                system_prompt = get_system_prompt_dedup_relationship_de()
+                user_prompt = get_user_prompt_dedup_relationship_de(subj, obj, prompt_rels_json)
             # LLM-Call
             try:
                 response = client.chat.completions.create(

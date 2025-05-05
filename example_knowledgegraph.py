@@ -51,8 +51,8 @@ entities = process_entities(
         "TEXT_CHUNK_OVERLAP": 50,  # Chunk-Überlappung
         
         # === KNOWLEDGE GRAPH COMPLETION ===
-        "ENABLE_KGC": False,       # Knowledge Graph Completion aktivieren
-        "KGC_ROUNDS": 3,            # Anzahl KGC-Runden
+        "ENABLE_KGC": True,       # Knowledge Graph Completion aktivieren
+        "KGC_ROUNDS": 2,            # Anzahl KGC-Runden
 
         # === GRAPH-VISUALISIERUNG ===
         "ENABLE_GRAPH_VISUALIZATION": True    # Graph-Visualisierung aktivieren

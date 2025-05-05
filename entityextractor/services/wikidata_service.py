@@ -11,7 +11,6 @@ import hashlib
 import json
 import os
 from openai import OpenAI
-
 from entityextractor.config.settings import DEFAULT_CONFIG
 from entityextractor.utils.text_utils import clean_json_from_markdown
 
@@ -158,10 +157,10 @@ def generate_entity_synonyms(entity_name, language="en", config=None):
     # Determine the prompt based on language
     if language == "en":
         system_prompt = "You are an expert in entity recognition and Wikidata knowledge base conventions."
-        user_prompt = f"Generate the 3 most likely alternative names or synonyms for '{entity_name}' that would match Wikidata's naming conventions. Focus on official terminology used in Wikidata entries, not general synonyms. For scientific concepts, prefer standard English academic terminology. Return ONLY a JSON array of strings without any explanation."
+        user_prompt = f"Generate the 3 most likely alternative names or synonyms for '{entity_name}' that would match Wikidata's naming conventions. Ideally, each suggestion should be a single word. Focus on official terminology used in Wikidata entries, not general synonyms. For scientific concepts, prefer standard English academic terminology. Return ONLY a JSON array of strings without any explanation."
     else:
         system_prompt = "Du bist ein Experte für Entitätserkennung und die Namenskonventionen der Wikidata-Wissensdatenbank."
-        user_prompt = f"Generiere die 3 wahrscheinlichsten alternativen Namen oder Synonyme für '{entity_name}', die den Namenskonventionen von Wikidata entsprechen würden. Konzentriere dich auf die offizielle Terminologie, die in Wikidata-Einträgen verwendet wird, nicht auf allgemeine Synonyme. Für wissenschaftliche Konzepte bevorzuge die standardisierte Fachterminologie. Gib NUR ein JSON-Array von Strings zurück, ohne jegliche Erklärung."
+        user_prompt = f"Generiere die 3 wahrscheinlichsten alternativen Namen oder Synonyme für '{entity_name}', die den Namenskonventionen von Wikidata entsprechen würden. Jeder Vorschlag sollte idealerweise nur ein Wort sein. Konzentriere dich auf die offizielle Terminologie, die in Wikidata-Einträgen verwendet wird, nicht auf allgemeine Synonyme. Für wissenschaftliche Konzepte bevorzuge die standardisierte Fachterminologie. Gib NUR ein JSON-Array von Strings zurück, ohne jegliche Erklärung."
     
     try:
         response = client.chat.completions.create(
@@ -227,6 +226,7 @@ def get_wikidata_id_from_wikipedia_url(wikipedia_url, entity_name=None, config=N
     params = {
         "action": "query",
         "prop": "pageprops",
+        "redirects": 1,  # Follow redirects to get canonical pageprops
         "titles": title,
         "format": "json"
     }
@@ -235,6 +235,22 @@ def get_wikidata_id_from_wikipedia_url(wikipedia_url, entity_name=None, config=N
         response = requests.get(api_url, params=params, timeout=config.get('TIMEOUT_THIRD_PARTY', 15))
         response.raise_for_status()
         data = response.json()
+        
+        # Normalize and follow redirects to get canonical title
+        original_title = title
+        norms = data.get("query", {}).get("normalized", [])
+        redirects = data.get("query", {}).get("redirects", [])
+        new_title = None
+        if norms:
+            new_title = norms[0].get("to")
+        elif redirects:
+            new_title = redirects[0].get("to")
+        if new_title and new_title != original_title:
+            logging.info(f"Canonical title for Wikidata lookup: {original_title} -> {new_title}")
+            title = new_title
+            # Use canonical name for fallback search
+            entity_name = new_title.replace('_', ' ')
+            
         pages = data.get("query", {}).get("pages", {})
         for page_id, page in pages.items():
             pageprops = page.get("pageprops", {})
@@ -329,6 +345,21 @@ def get_wikidata_details(entity_id, language="de", config=None):
     if config is None:
         config = DEFAULT_CONFIG
         
+    # === Wikidata details caching ===
+    if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIDATA_ENABLED") and entity_id:
+        cache_dir = config.get("CACHE_DIR", "cache")
+        wikidata_cache_dir = os.path.join(cache_dir, "wikidata")
+        os.makedirs(wikidata_cache_dir, exist_ok=True)
+        cache_key = hashlib.sha256(entity_id.encode("utf-8")).hexdigest()
+        cache_path = os.path.join(wikidata_cache_dir, f"{cache_key}.json")
+        if os.path.exists(cache_path):
+            logging.info(f"Loaded Wikidata cache for {entity_id}")
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Failed to load Wikidata cache {cache_path}: {e}")
+                
     wikidata_url = f"https://www.wikidata.org/wiki/Special:EntityData/{entity_id}.json"
     
     try:
@@ -623,6 +654,14 @@ def get_wikidata_details(entity_id, language="de", config=None):
             if dv.get("type") == "string" and dv.get("value"):
                 result["isni"] = dv["value"]
             
+        # Save Wikidata cache
+        if config.get("CACHE_ENABLED") and config.get("CACHE_WIKIDATA_ENABLED") and entity_id:
+            try:
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(result, f)
+                logging.info(f"Saved Wikidata cache for {entity_id} to {cache_path}")
+            except Exception as e:
+                logging.warning(f"Failed to save Wikidata cache {cache_path}: {e}")
         return result
     except Exception as e:
         logging.error("Error retrieving Wikidata details for %s: %s", entity_id, e)

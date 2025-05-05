@@ -15,6 +15,16 @@ from entityextractor.utils.logging_utils import configure_logging
 from entityextractor.utils.text_utils import clean_json_from_markdown
 from entityextractor.services.openai_service import save_training_data as save_extraction_training_data
 from entityextractor.core.entity_inference import infer_entities
+from entityextractor.prompts.generation_prompts import (
+    get_system_prompt_compendium_en,
+    get_user_prompt_compendium_en,
+    get_system_prompt_compendium_de,
+    get_user_prompt_compendium_de,
+    get_system_prompt_generate_en,
+    get_user_prompt_generate_en,
+    get_system_prompt_generate_de,
+    get_user_prompt_generate_de,
+)
 
 def save_training_data(topic, entities, config=None):
     """
@@ -32,20 +42,28 @@ def save_training_data(topic, entities, config=None):
     training_data_path = config.get("OPENAI_TRAINING_DATA_PATH", DEFAULT_CONFIG["OPENAI_TRAINING_DATA_PATH"])
     
     try:
-        # Get system prompt based on language
+        # Determine prompts from centralized generation_prompts module
         language = config.get("LANGUAGE", "de")
-        system_prompt = ""
-        
-        if language == "en":
-            system_prompt = "You are a comprehensive knowledge generator for creating educational compendia. Your task is to generate the most important entities related to a specific topic."
+        mode = config.get("MODE", "")
+        max_entities = config.get("MAX_ENTITIES", 10)
+        if mode == "compendium":
+            if language == "en":
+                system_prompt = get_system_prompt_compendium_en(max_entities, topic)
+                user_prompt = get_user_prompt_compendium_en(max_entities, topic)
+            else:
+                system_prompt = get_system_prompt_compendium_de(max_entities, topic)
+                user_prompt = get_user_prompt_compendium_de(max_entities, topic)
         else:
-            system_prompt = "Du bist ein umfassender Wissensgenerator für die Erstellung von Bildungskompendien. Deine Aufgabe ist es, die wichtigsten Entitäten zu einem bestimmten Thema zu generieren."
-        
-        # Create a training example in OpenAI format
+            if language == "en":
+                system_prompt = get_system_prompt_generate_en(max_entities, topic)
+                user_prompt = get_user_prompt_generate_en(max_entities, topic)
+            else:
+                system_prompt = get_system_prompt_generate_de(max_entities, topic)
+                user_prompt = get_user_prompt_generate_de(max_entities, topic)
         example = {
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Generate the most important entities related to the topic: {topic}"},
+                {"role": "user", "content": user_prompt},
                 {"role": "assistant", "content": json.dumps({"entities": entities}, ensure_ascii=False)}
             ]
         }
@@ -105,103 +123,23 @@ def generate_entities(topic, user_config=None):
     # Get allowed entity types if specified
     allowed_entity_types = config.get("ALLOWED_ENTITY_TYPES", "auto")
     
-    # Override prompts in generate mode: only implicit entities
+    # Prompt preparation using centralized prompt functions
     mode = config.get("MODE", "extract")
-    # Compendium mode: detailed prompt focused on implicit entities
     if mode == "compendium":
         if language == "de":
-            system_prompt = f"""
-Du bist ein umfassender Wissensgenerator für die Erstellung von Bildungskompendien. Denke sorgfältig nach und antworte vollständig.
-Generiere genau {max_entities} implizite, logische Entitäten zum Thema: {topic}.
-
-Achte darauf, ausschließlich implizit aus dem Kontext abgeleitete Entitäten zu generieren und keine expliziten Entitäten aufzunehmen.
-
-Gib ein JSON-Array mit {max_entities} Objekten zurück. Jedes Objekt enthält:
-- entity: Exakter Titel im deutschen Wikipedia-Artikel
-- entity_type: Typ der Entität
-- wikipedia_url: URL des deutschen Wikipedia-Artikels
-- citation: "generated"
-- inferred: "implicit"
-
-Berücksichtige bei der Auswahl impliziter Entitäten z.B.:
-1. Einführung & Grundlagen
-2. Fachterminologie & Konzepte
-3. Systematische Struktur
-4. Gesellschaftlicher Kontext
-5. Historische Entwicklung
-6. Akteure & Institutionen
-7. Berufliche Praxis
-8. Quellen & Literatur
-9. Bildungsaspekte
-10. Rechtlicher & ethischer Rahmen
-11. Nachhaltigkeit
-12. Interdisziplinarität
-13. Aktuelle Entwicklungen
-14. Ressourcen & Werkzeuge
-15. Praxisbeispiele
-
-Regeln:
-- Generiere ausschließlich implizite Entitäten.
-- Generiere genau {max_entities} Entitäten.
-- Verwende deutsche Wikipedia-Titel und URLs.
-- Gib nur gültiges JSON ohne Erklärung zurück.
-"""
-            user_msg = system_prompt
+            system_prompt = get_system_prompt_compendium_de(max_entities, topic)
+            user_msg = get_user_prompt_compendium_de(max_entities, topic)
         else:
-            system_prompt = f"""
-You are a comprehensive knowledge generator for creating educational compendia. Think carefully and answer thoroughly.
-Generate exactly {max_entities} implicit, logical entities for the topic: {topic}.
-
-Ensure that you only generate entities that are implicitly derived from the context and exclude any explicit entities.
-
-Return a JSON array of {max_entities} objects. Each object contains:
-- entity: Exact English Wikipedia title
-- entity_type: Type of the entity
-- wikipedia_url: URL of the English Wikipedia article
-- citation: "generated"
-- inferred: "implicit"
-
-Consider when selecting implicit entities:
-1. Introduction & Fundamentals
-2. Core Terminology & Concepts
-3. Systematic Structure
-4. Social Context
-5. Historical Development
-6. Actors & Institutions
-7. Professional Practice
-8. Sources & Literature
-9. Educational Aspects
-10. Legal & Ethical Framework
-11. Sustainability
-12. Interdisciplinarity
-13. Current Developments
-14. Resource Connections
-15. Practical Examples
-
-Rules:
-- Generate only implicit entities.
-- Generate exactly {max_entities} entities.
-- Use English Wikipedia titles and URLs.
-- Return only valid JSON without explanation.
-"""
-            user_msg = system_prompt
-    elif mode == "generate":
-        # Determine the prompt based on language
-        if language == "en":
-            system_prompt = f"Generate {max_entities} implicit, logical entities relevant to the topic: {topic}. Only output implicit entities."
-            user_msg = f"Provide a JSON array of {max_entities} objects, each with fields 'entity', 'entity_type', 'wikipedia_url', 'inferred', 'citation'. Set 'inferred' to \"implicit\" and 'citation' to \"generated\" for all entities. Return only JSON."
-        else:
-            system_prompt = f"Generiere {max_entities} implizite, logische Entitäten zum Thema: {topic}. Ausgabe: nur implizite Entitäten."
-            user_msg = f"Gib ein JSON-Array von {max_entities} Objekten mit den Feldern 'entity', 'entity_type', 'wikipedia_url', 'inferred', 'citation' zurück. Setze 'inferred' auf \"implicit\" und 'citation' auf \"generated\" für alle Entitäten. Nur JSON zurückgeben."
+            system_prompt = get_system_prompt_compendium_en(max_entities, topic)
+            user_msg = get_user_prompt_compendium_en(max_entities, topic)
     else:
-        logging.warning(f"MODE '{mode}' nicht unterstützt; wechsle zum 'generate'-Verhalten.")
-        # Fallback auf vereinfachten Generate-Prompt
-        if language == "en":
-            system_prompt = f"Generate {max_entities} implicit, logical entities relevant to the topic: {topic}. Only output implicit entities."
-            user_msg = f"Provide a JSON array of {max_entities} objects, each with fields 'entity', 'entity_type', 'wikipedia_url', 'inferred', 'citation'. Set 'inferred' to \"implicit\" and 'citation' to \"generated\" for all entities. Return only JSON."
+        # Default generate mode
+        if language == "de":
+            system_prompt = get_system_prompt_generate_de(max_entities, topic)
+            user_msg = get_user_prompt_generate_de(max_entities, topic)
         else:
-            system_prompt = f"Generiere {max_entities} implizite, logische Entitäten zum Thema: {topic}. Ausgabe: nur implizite Entitäten."
-            user_msg = f"Gib ein JSON-Array von {max_entities} Objekten mit den Feldern 'entity', 'entity_type', 'wikipedia_url', 'inferred', 'citation' zurück. Setze 'inferred' auf \"implicit\" und 'citation' auf \"generated\" für alle Entitäten. Nur JSON zurückgeben."
+            system_prompt = get_system_prompt_generate_en(max_entities, topic)
+            user_msg = get_user_prompt_generate_en(max_entities, topic)
     
     try:
         # Log the model being used

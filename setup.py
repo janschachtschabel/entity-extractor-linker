@@ -19,6 +19,10 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/janschachtschabel/entity-extractor-linker",
     packages=find_packages(),
+    include_package_data=True,
+    package_data={
+        'entityextractor': ['cache/*', 'cache/README.md'],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
