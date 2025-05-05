@@ -38,31 +38,37 @@ Entity Extractor and Linker ist ein leistungsstarkes Tool zur Erkennung, Extrakt
 
 ## Modulare Struktur
 
-```
+```plaintext
 entityextractor/
-├── __init__.py           # Paket-Initialisierung
-├── main.py               # Haupteinstiegspunkt und CLI
-├── config/               # Konfigurationsmodule
+├── __init__.py              # Paket-Initialisierung
+├── main.py                  # CLI-Einstiegspunkt
+├── config/                  # Konfigurationsmodule
 │   ├── __init__.py
-│   └── settings.py       # Standardkonfiguration
-├── core/                 # Kernfunktionalität
+│   └── settings.py          # Standardkonfiguration
+├── core/                    # Kernfunktionalität
 │   ├── __init__.py
-│   ├── api.py            # Hauptschnittstelle
-│   ├── extractor.py      # Entitätsextraktion
-│   ├── linker.py         # Entitätsverknüpfung
-│   ├── generator.py      # Entitätsgenerierung
-│   ├── entity_inference.py # Entity-Inferenz für implizite Entitäten
-│   └── relationship_inference.py # Beziehungserkennung und -inferenz
-└── services/             # Externe Dienste
+│   ├── api.py               # API-Schnittstelle
+│   ├── extractor.py         # Entitätsextraktion
+│   ├── linker.py            # Entitätsverknüpfung
+│   ├── generator.py         # Entitätsgenerierung
+│   ├── entity_inference.py  # Entity-Inferenz
+│   ├── relationship_inference.py  # Beziehungsinferenz
+│   ├── graph_visualization.py     # Graph-Ausgabe (PNG & HTML)
+│   └── visualization_api.py       # Frontend-Visualisierungs-API
+├── prompts/                 # Prompt-Definitionen
+│   └── ...
+├── services/                # Externe Dienste
 │   ├── __init__.py
-│   ├── openai_service.py # OpenAI-Integration
+│   ├── openai_service.py    # OpenAI-Integration
 │   ├── wikipedia_service.py # Wikipedia-Integration
 │   ├── wikidata_service.py  # Wikidata-Integration
 │   └── dbpedia_service.py   # DBpedia-Integration
-└── utils/                # Hilfsfunktionen
-    ├── __init__.py
-    ├── logging_utils.py  # Logging-Funktionen
-    └── text_utils.py     # Textverarbeitung
+├── utils/                   # Hilfsfunktionen
+│   ├── __init__.py
+│   ├── logging_utils.py     # Logging
+│   └── text_utils.py        # Textverarbeitung
+└── cache/                   # Cache-Dateien (Wikipedia, Wikidata, DBpedia)
+    └── ...
 ```
 
 ## Installation
@@ -110,16 +116,14 @@ Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt. Alle
 | Parameter | Typ | Standardwert | Beschreibung |
 |-----------|-----|--------------|-------------|
 | `LANGUAGE` | string | `"de"` | Ausgabesprache ("de" oder "en") |
-| `MODEL` | string | `"gpt-4.1-mini"` | OpenAI-Modell für die Entitätsextraktion |
+| `MODEL` | string | `"gpt-4o-mini"` | OpenAI-Modell für die Entitätsextraktion |
 | `MAX_ENTITIES` | int | `10` | Maximale Anzahl der zu extrahierenden/generierenden Entitäten |
 | `USE_WIKIPEDIA` | bool | `True` | Wikipedia-Integration aktivieren |
 | `USE_WIKIDATA` | bool | `True` | Wikidata-Integration aktivieren |
 | `USE_DBPEDIA` | bool | `True` | DBpedia-Integration aktivieren |
-| `ADDITIONAL_DETAILS` | bool | `False` | Abruf zusätzlicher Details aus den Wissensquellen aktivieren |
-| `DBPEDIA_USE_DE` | bool | `True` | Deutsche DBpedia-Server verwenden |
-| `TIMEOUT_THIRD_PARTY` | int | `20` | Timeout für externe API-Anfragen in Sekunden |
+| `TIMEOUT_THIRD_PARTY` | int | `15` | Timeout für externe API-Anfragen in Sekunden |
 | `OPENAI_API_KEY` | string | `None` | OpenAI API-Schlüssel (None = aus Umgebungsvariable laden) |
-| `SHOW_STATUS` | bool | `False` | Status-/Logging-Meldungen anzeigen |
+| `SHOW_STATUS` | bool | `True` | Status-/Logging-Meldungen anzeigen |
 | `SUPPRESS_TLS_WARNINGS` | bool | `True` | TLS-Warnungen von urllib3 unterdrücken |
 | `COLLECT_TRAINING_DATA` | bool | `False` | Sammelt Trainingsdaten für Finetuning |
 | `TRAINING_DATA_PATH` | string | `"entity_extractor_training_data.jsonl"` | Pfad zur JSONL-Datei für Trainingsdaten |
@@ -139,7 +143,7 @@ Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt. Alle
 | `GRAPH_PHYSICS_PREVENT_OVERLAP` | bool | `True` | Überlappungsprävention im Spring-Layout aktivieren (nur bei `spring`). |
 | `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE` | float | `0.1` | Mindestabstand für Überlappungsprävention (nur bei `spring`). |
 | `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS` | int | `50` | Iterationen für Überlappungsprävention (nur bei `spring`). |
-| `GRAPH_PNG_SCALE` | float | `0.33` | Skalierungsfaktor für statisches PNG-Layout (Standard 0.33). |
+| `GRAPH_PNG_SCALE` | float | `0.30` | Skalierungsfaktor für statisches PNG-Layout (Standard 0.30). |
 | `GRAPH_HTML_INITIAL_SCALE` | int | `10` | Anfangs-Zoom im interaktiven HTML-Graph (network.moveTo scale). |
 | `CACHE_ENABLED` | bool | `True` | Aktiviert globales Caching für alle Abfragen und Ergebnisse. |
 | `CACHE_DIR` | string | `./cache` | Verzeichnis für Cache-Dateien (Wikipedia, Wikidata, DBpedia). |
@@ -185,7 +189,7 @@ from entityextractor.core.api import process_entities
 text = "Albert Einstein war ein theoretischer Physiker."
 config_extract = {
     "LANGUAGE": "de",              # Ausgabesprache ("de" oder "en")
-    "MODEL": "gpt-4.1-mini",       # OpenAI-Modell
+    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
     "MODE": "extract",             # Extraktionsmodus
     "USE_WIKIPEDIA": True,          # Wikipedia-Integration
     "USE_WIKIDATA": True,           # Wikidata-Integration
@@ -199,7 +203,7 @@ print(json.dumps(result, ensure_ascii=False, indent=2))
 topic = "Klassische Mechanik und ihre Anwendungen in der Physik"
 config_generate = {
     "LANGUAGE": "en",
-    "MODEL": "gpt-4.1-mini",
+    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
     "MODE": "generate",
     "MAX_ENTITIES": 10,
     "USE_WIKIPEDIA": True,
@@ -216,7 +220,7 @@ print(json.dumps(result, ensure_ascii=False, indent=2))
 text = "Apple und Microsoft sind große Technologieunternehmen."
 config_chunking = {
     "LANGUAGE": "de",
-    "MODEL": "gpt-4o-mini",
+    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
     "MODE": "extract",
     "MAX_ENTITIES": 5,
     "USE_WIKIPEDIA": True,
@@ -237,8 +241,7 @@ print(json.dumps(result, ensure_ascii=False, indent=2))
 # {
 #   "entities": [...],
 #   "relationships": [...],
-#   "config": {...},
-#   ...
+#   "knowledgegraph_visualisation": [ ... ]
 # }
 
 # --- Hinweise ---
@@ -267,76 +270,40 @@ entityextractor --file input.txt --output result.json --language en --model gpt-
 Ein typischer JSON-Output sieht wie folgt aus:
 
 ```json
-[
-  {
-    "entity": "Johann Amos Comenius",
-    "details": {
-      "typ": "Person",
-      "inferred": "explizit",
-      "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna', das als Grundlage der modernen Pädagogik gilt.",
-      "citation_start": 0,
-      "citation_end": 117
-    },
-    "sources": {
-      "wikipedia": {
-        "url": "https://de.wikipedia.org/wiki/Johann_Amos_Comenius",
-        "label": "Johann Amos Comenius",
-        "extract": "Johann Amos Comenius (deutsch auch Komenius, lateinisch Iohannes Amos Comenius, tschechisch Jan Amos Komenský, früherer Familienname Segeš; * 28. März 1592 in Nivnice, Mähren; † 15. November 1670 in Amsterdam) war ein mährischer Philosoph, Pädagoge und evangelischer Theologe. Comenius war Bischof der Böhmischen Brüder."
+{
+  "entities": [
+    {
+      "entity": "Johann Amos Comenius",
+      "details": {
+        "typ": "Person",
+        "inferred": "explizit",
+        "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna'...",
+        "citation_start": 0,
+        "citation_end": 117
+      },
+      "sources": {
+        "wikipedia": { "url": "https://de.wikipedia.org/wiki/Johann_Amos_Comenius", "label": "Johann Amos Comenius" }
       }
-    }
-  },
-  {
-    "entity": "Didactica Magna",
-    "details": {
-      "typ": "Werk",
-      "inferred": "explizit",
-      "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna', das als Grundlage der modernen Pädagogik gilt.",
-      "citation_start": 0,
-      "citation_end": 117
     },
-    "sources": {
-      "wikipedia": {
-        "url": "https://de.wikipedia.org/wiki/Didactica_magna",
-        "label": "Didactica magna",
-        "extract": "Die Didactica Magna oder Große Didaktik wurde von Johann Amos Comenius zwischen 1627 und 1638 in lateinischer Sprache verfasst und im Jahr 1657 erstmals veröffentlicht."
-      }
+    {
+      "entity": "Didactica Magna",
+      "details": { "typ": "Werk", "inferred": "explizit" },
+      "sources": { "wikipedia": { "url": "https://de.wikipedia.org/wiki/Didactica_magna", "label": "Didactica magna" } }
     }
-  },
-  {
-    "entity": "1632",
-    "details": {
-      "typ": "Zeitraum",
-      "inferred": "explizit",
-      "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna', das als Grundlage der modernen Pädagogik gilt.",
-      "citation_start": 0,
-      "citation_end": 117
-    },
-    "sources": {
-      "wikipedia": {
-        "url": "https://de.wikipedia.org/wiki/1632",
-        "label": "1632",
-        "extract": "Portal Geschichte | Portal Biografien | Aktuelle Ereignisse | Jahreskalender | Tagesartikel..."  
-      }
+  ],
+  "relationships": [
+    {
+      "subject": "Johann Amos Comenius",
+      "predicate": "veröffentlichte",
+      "object": "Didactica Magna",
+      "inferred": "explicit",
+      "subject_type": "Person",
+      "object_type": "Werk",
+      "subject_inferred": "explicit",
+      "object_inferred": "explicit"
     }
-  },
-  {
-    "entity": "Pädagogik",
-    "details": {
-      "typ": "Wissenschaft",
-      "inferred": "explizit",
-      "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna', das als Grundlage der modernen Pädagogik gilt.",
-      "citation_start": 0,
-      "citation_end": 117
-    },
-    "sources": {
-      "wikipedia": {
-        "url": "https://de.wikipedia.org/wiki/P%C3%A4dagogik",
-        "label": "Pädagogik",
-        "extract": "Pädagogik (Wortbildung aus altgriechisch…) sind Bezeichnungen für eine wissenschaftliche Disziplin..."
-      }
-    }
-  }
-]
+  ]
+}
 ```
 
 ## Ausgabestruktur
