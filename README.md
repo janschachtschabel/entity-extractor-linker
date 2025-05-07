@@ -1,525 +1,291 @@
-# Entity Extractor and Linker (LLM based)
+# Entity Extractor & Linker (LLM-basiert)
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/janschachtschabel/entity-extractor-linker)
 
-Entity Extractor and Linker ist ein leistungsstarkes Tool zur Erkennung, Extraktion und Anreicherung von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität. Zusätzlich können Beziehungen zwischen Entitäten erkannt und als explizite oder implizite Beziehungen klassifiziert werden.
+Entity Extractor and Linker ist ein leistungsstarkes Tool zur Extraktion von Entitäten in Texten mit Informationen aus Wikipedia, Wikidata und DBpedia. Die Anwendung unterstützt mehrsprachige Ausgaben (Deutsch und Englisch) und bietet eine reichhaltige JSON-Struktur mit detaillierten Informationen zu jeder erkannten Entität. Zusätzlich können Beziehungen zwischen Entitäten erkannt und als explizite oder implizite Beziehungen klassifiziert werden.
 
 ## Inhaltsverzeichnis
 
-- [Funktionen](#funktionen)
-- [Modulare Struktur](#modulare-struktur)
 - [Installation](#installation)
-- [Verwendung](#verwendung)
+- [Funktionen](#funktionen)
 - [Konfiguration](#konfiguration)
+- [Anwendungsbeispiele](#anwendungsbeispiele)
 - [Ausgabestruktur](#ausgabestruktur)
-- [Tipps und Best Practices](#tipps)
+- [Lizenz](#lizenz)
+- [NOTICE](#notice)
+- [Projektstruktur](#projektstruktur)
+- [Funktionsweise](#funktionsweise)
+- [Tipps und Best Practices](#tipps-und-best-practices)
 - [Fehlerbehebung](#fehlerbehebung)
 - [Erweiterung](#erweiterung)
-- [Lizenz](#lizenz)
-- [Autor](#autor)
-
-## Funktionen
-
-- **KI-basierte Entitätserkennung** mit OpenAI-Modellen (GPT-4o-mini, GPT-4o, etc.)
-- **Automatische Verknüpfung** mit Wikipedia-Artikeln und Extraktion von Zusammenfassungen
-- **Wikidata-Integration** für strukturierte Daten wie Typen, Beschreibungen, Bilder und mehr
-- **DBpedia-Unterstützung** für zusätzliche semantische Informationen
-- **Triple-basierte Beziehungserkennung** zwischen Entitäten mit Subjekt-, Prädikat-, Objekt-Tripeln, Inferenz-Status (explizit/implizit) und Entitätstypen
-- **Entity-Inferenz** zur Ergänzung impliziter Entitäten aus dem Kontext
-- **Text-Chunking** zur Aufteilung langer Texte in überlappende Chunks für die Verarbeitung
-- **Knowledge Graph Completion (KGC)** als iterativer Schritt zur Vervollständigung von Knowledge Graphs
-- **Sammlung von Trainingsdaten** für das Finetuning bei OpenAI zur Verbesserung der Entitätserkennung mit korrigierten URLs
-- **Mehrsprachige Unterstützung** für Deutsch und Englisch mit automatischer Übersetzung
-- **Robuste Fehlerbehandlung** mit Fallback-Mechanismen für verschiedene Datenquellen
-- **Modulare Architektur** für einfache Erweiterbarkeit und Wartung
-- **Kommandozeilenschnittstelle** für schnelle Verarbeitung von Texten und Dateien
-- **Umfangreiche Konfigurationsoptionen** für maximale Flexibilität
-
-## Modulare Struktur
-
-```plaintext
-entityextractor/
-├── __init__.py              # Paket-Initialisierung
-├── main.py                  # CLI-Einstiegspunkt
-├── config/                  # Konfigurationsmodule
-│   ├── __init__.py
-│   └── settings.py          # Standardkonfiguration
-├── core/                    # Kernfunktionalität
-│   ├── __init__.py
-│   ├── api.py               # API-Schnittstelle
-│   ├── extractor.py         # Entitätsextraktion
-│   ├── linker.py            # Entitätsverknüpfung
-│   ├── generator.py         # Entitätsgenerierung
-│   ├── entity_inference.py  # Entity-Inferenz
-│   ├── relationship_inference.py  # Beziehungsinferenz
-│   ├── graph_visualization.py     # Graph-Ausgabe (PNG & HTML)
-│   └── visualization_api.py       # Frontend-Visualisierungs-API
-├── prompts/                 # Prompt-Definitionen
-│   └── ...
-├── services/                # Externe Dienste
-│   ├── __init__.py
-│   ├── openai_service.py    # OpenAI-Integration
-│   ├── wikipedia_service.py # Wikipedia-Integration
-│   ├── wikidata_service.py  # Wikidata-Integration
-│   └── dbpedia_service.py   # DBpedia-Integration
-├── utils/                   # Hilfsfunktionen
-│   ├── __init__.py
-│   ├── logging_utils.py     # Logging
-│   └── text_utils.py        # Textverarbeitung
-└── cache/                   # Cache-Dateien (Wikipedia, Wikidata, DBpedia)
-    └── ...
-```
 
 ## Installation
 
-### Voraussetzungen
-
-- Python 3.8 oder höher
-- OpenAI API-Schlüssel (als Umgebungsvariable `OPENAI_API_KEY`)
-
-### Abhängigkeiten
-
-Installieren Sie die benötigten Pakete mit:
-
 ```bash
-pip install -r requirements.txt
-```
+# Repository klonen
+git clone https://github.com/janschachtschabel/entity-extractor-linker.git
+cd entity-extractor-linker
 
-### Installation als Paket
-
-Sie können das Paket auch direkt installieren:
-
-```bash
+# Option 1: Entwicklungsinstallation (empfohlen)
 pip install -e .
+
+# Option 2: Produktion
+pip install entity-extractor-linker
 ```
 
-Dies ermöglicht die Verwendung des `entityextractor`-Befehls in der Kommandozeile.
+Setze anschließend den OpenAI API Key in der Umgebungsvariable:
+
+```bash
+export OPENAI_API_KEY="<dein_api_key>"
+```
+
+## Funktionen
+
+- **Entitäten extrahieren**: Direkt aus Texten identifizieren (extrahieren).
+- **Entitäten generieren**: Kontextbasiert neue Entitäten vorschlagen (generieren).
+- **Beziehungsextraktion**: Explizite Beziehungen (Subjekt; Prädikat; Objekt) im Text erkennen.
+- **Beziehungsinferenz**: Implizite logische Verbindungen ergänzen und Knowledge Graph vervollständigen.
+- **Knowledge Graph Completion (KGC)**: Fehlende Relationen in mehreren Runden automatisch generieren.
+- **Graph-Visualisierung**: Erzeuge statische PNG-Graphen oder interaktive HTML-Ansichten.
+- **Trainingsdaten-Generierung**: Speichere Entity- und Relationship-Daten als JSONL für OpenAI Fine-Tuning.
+- **LLM-Schnittstelle**: Kompatibel mit OpenAI-API, anpassbare Basis-URL und Modell.
+- **Wissensquellen-Integration**: Wikipedia, Wikidata, DBpedia (SPARQL + Lookup API Fallback).
+- **Caching**: Zwischenspeicherung von API-Antworten für schnellere wiederholte Zugriffe.
+
+## Projektstruktur
+
+```plaintext
+.
+├── README.md
+├── README-alt.md
+├── NOTICE
+├── requirements.txt
+├── setup.py
+├── example_extract.py
+├── example_extract_simple.py
+├── example_generate.py
+├── example_generate_simple.py
+├── example_relations.py
+├── example_knowledgegraph.py
+├── example_chunking.py
+├── example_compendium_person.py
+├── lib/                      # Externe Bibliotheken
+│   └── ...
+├── entityextractor/          # Hauptpaket
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── settings.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── api.py
+│   │   ├── extractor.py
+│   │   ├── linker.py
+│   │   ├── generator.py
+│   │   ├── entity_inference.py
+│   │   ├── relationship_inference.py
+│   │   ├── graph_visualization.py
+│   │   └── visualization_api.py
+│   ├── prompts/             # Prompt-Definitionen
+│   │   └── ...
+│   ├── services/            # Externe Dienste
+│   │   ├── openai_service.py
+│   │   ├── wikipedia_service.py
+│   │   ├── wikidata_service.py
+│   │   └── dbpedia_service.py
+│   ├── utils/               # Hilfsfunktionen
+│   │   ├── logging_utils.py
+│   │   └── text_utils.py
+│   └── cache/               # Cache-Dateien (Wikipedia, Wikidata, DBpedia)
+│       └── ...
+└── .pytest_cache/            # Pytest Cache-Verzeichnis
+```
 
 ## Funktionsweise
 
-Der Entity Extractor arbeitet in mehreren Schritten:
+Der Entity Extractor verarbeitet Text in mehreren Schritten:
 
-1. **Entitätserkennung**: Verwendet OpenAI-LLMs (wie GPT-4.1-mini), um Entitäten im Text zu identifizieren, ihren Typ zu bestimmen und Zitate zu extrahieren.
-2. **Wikipedia-Integration**: Verknüpft erkannte Entitäten mit passenden Wikipedia-Artikeln und extrahiert Zusammenfassungen.
-3. **Wikidata-Integration**: Holt Wikidata-IDs, Beschreibungen und Typen für die erkannten Entitäten.
-4. **DBpedia-Integration**: Verbindet zu DBpedia, um zusätzliche strukturierte Informationen zu erhalten.
-5. **Sprachübergreifende Verarbeitung**: Unterstützt sowohl deutsche als auch englische Ausgaben und kann zwischen Sprachversionen von Artikeln wechseln.
-6. **Trainingsdatensammlung**: Kann optional korrigierte Entitätsdaten im JSONL-Format für OpenAI-Finetuning sammeln.
+1. **Entitätserkennung**: Identifikation von Entitäten im Text durch LLMs.
+2. **Wikipedia-Integration**: Verknüpfung erkannter Entitäten mit Wikipedia-Artikeln und Extraktion von Zusammenfassungen.
+3. **Wikidata-Integration**: Abruf von Wikidata-IDs, Typen und Beschreibungen.
+4. **DBpedia-Integration**: Nutzung von DBpedia für zusätzliche strukturierte Informationen.
+5. **Sprachübergreifende Verarbeitung**: Automatische Übersetzung und Suche in Deutsch und Englisch.
+6. **Knowledge Graph Completion (KGC)**: Iterative Vervollständigung fehlender Relationen.
+7. **Graph-Visualisierung**: Ausgabe als statisches PNG und interaktives HTML.
 
 ## Konfiguration
 
-Die Anwendung ist hochgradig konfigurierbar über ein Konfigurationsobjekt. Alle Einstellungen haben sinnvolle Standardwerte, sodass nur die Werte angegeben werden müssen, die vom Standard abweichen sollen.
+Alle Einstellungen liegen in `entityextractor/config/settings.py` unter `DEFAULT_CONFIG`. Wichtige Optionen:
 
-### Verfügbare Konfigurationsoptionen
+| Parameter                                            | Typ           | Standardwert                                         | Beschreibung                                                    |
+|------------------------------------------------------|---------------|------------------------------------------------------|------------------------------------------------------------------|
+| `LLM_BASE_URL`                                       | string        | `"https://api.openai.com/v1"`                     | Base URL für LLM API                                             |
+| `MODEL`                                              | string        | `"gpt-4.1-mini"`                                  | LLM-Modell                                                       |
+| `OPENAI_API_KEY`                                     | string        | `None`                                             | OpenAI-API-Key (aus Umgebung)                                    |
+| `MAX_TOKENS`                                         | int           | `16000`                                            | Maximale Tokenzahl pro Anfrage                                    |
+| `TEMPERATURE`                                        | float         | `0.2`                                              | Sampling-Temperatur                                              |
+| `USE_WIKIPEDIA`                                      | bool          | `True`                                             | Wikipedia-Integration aktivieren                                 |
+| `USE_WIKIDATA`                                       | bool          | `False`                                            | Wikidata-Integration aktivieren                                  |
+| `USE_DBPEDIA`                                        | bool          | `False`                                            | DBpedia-Integration aktivieren                                   |
+| `ADDITIONAL_DETAILS`                                 | bool          | `False`                                            | Zusätzliche Details aus Wissensquellen abrufen                  |
+| `DBPEDIA_USE_DE`                                     | bool          | `False`                                            | Deutsche DBpedia zuerst abfragen                                 |
+| `DBPEDIA_LOOKUP_API`                                 | bool          | `False`                                            | DBpedia Lookup API verwenden                                     |
+| `DBPEDIA_SKIP_SPARQL`                                | bool          | `False`                                            | Nur Lookup API, kein SPARQL                                       |
+| `DBPEDIA_LOOKUP_MAX_HITS`                            | int           | `5`                                                | Max. Trefferzahl für Lookup API                                  |
+| `DBPEDIA_LOOKUP_CLASS`                               | string/null   | `None`                                             | Optionale Ontologie-Klasse für Lookup API                        |
+| `DBPEDIA_LOOKUP_FORMAT`                              | string        | `"json"`                                         | Format: "json", "xml" oder "both"                          |
+| `LANGUAGE`                                           | string        | `"en"`                                           | Verarbeitungs-Sprache ("de" oder "en")                      |
+| `TEXT_CHUNKING`                                      | bool          | `False`                                            | Text-Chunking aktivieren                                         |
+| `TEXT_CHUNK_SIZE`                                    | int           | `2000`                                             | Chunk-Größe in Zeichen                                           |
+| `TEXT_CHUNK_OVERLAP`                                 | int           | `50`                                               | Überlappung zwischen Chunks                                      |
+| `MODE`                                               | string        | `"extract"`                                       | Modus: extract, generate oder compendium                         |
+| `MAX_ENTITIES`                                       | int           | `20`                                               | Max. Anzahl extrahierter Entitäten                              |
+| `ALLOWED_ENTITY_TYPES`                               | string        | `"auto"`                                         | Automatische Filterung von Typen                                  |
+| `ENABLE_ENTITY_INFERENCE`                            | bool          | `False`                                            | Implizite Entitäten aktivieren                                    |
+| `RELATION_EXTRACTION`                                | bool          | `False`                                            | Relationsextraction aktivieren                                   |
+| `ENABLE_RELATIONS_INFERENCE`                         | bool          | `False`                                            | Implizite Relation-Inferenz aktivieren                           |
+| `MAX_RELATIONS`                                      | int           | `15`                                               | Max. Anzahl Relationen pro Prompt                                |
+| `ENABLE_KGC`                                         | bool          | `False`                                            | Knowledge Graph Completion aktivieren                            |
+| `KGC_ROUNDS`                                         | int           | `3`                                                | Anzahl Runden für KGC                                             |
+| `COLLECT_TRAINING_DATA`                              | bool          | `False`                                            | Trainingsdaten sammeln                                            |
+| `OPENAI_TRAINING_DATA_PATH`                          | string        | `"entity_extractor_training_openai.jsonl"`     | Pfad für Entity-Trainingsdaten                                   |
+| `OPENAI_RELATIONSHIP_TRAINING_DATA_PATH`             | string        | `"entity_relationship_training_openai.jsonl"`   | Pfad für Relation-Trainingsdaten                                 |
+| `TIMEOUT_THIRD_PARTY`                                | int           | `15`                                               | Timeout für externe Dienste                                      |
+| `SHOW_STATUS`                                        | bool          | `True`                                             | Statusmeldungen anzeigen                                          |
+| `SUPPRESS_TLS_WARNINGS`                              | bool          | `True`                                             | TLS-Warnungen unterdrücken                                        |
+| `ENABLE_GRAPH_VISUALIZATION`                         | bool          | `False`                                            | PNG & HTML-Graph aktivieren                                       |
+| `GRAPH_LAYOUT_METHOD`                                | string        | `"spring"`                                       | Layout: "kamada_kawai" oder "spring"                         |
+| `GRAPH_LAYOUT_K`                                     | float/null    | `None`                                             | Ideale Kantenlänge (Spring)                                       |
+| `GRAPH_LAYOUT_ITERATIONS`                            | int           | `50`                                               | Iterationen für Spring-Layout                                     |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP`                      | bool          | `True`                                             | Überlappungsprävention aktivieren                                 |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE`             | float         | `0.1`                                              | Mindestabstand für Überlappung                                    |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS`           | int           | `50`                                               | Iterationen Overlap-Prevention                                   |
+| `GRAPH_PNG_SCALE`                                    | float         | `0.30`                                            | Skalierungsfaktor für statisches PNG                              |
+| `GRAPH_HTML_INITIAL_SCALE`                           | int           | `10`                                               | Anfangs-Zoom im interaktiven HTML-Graph                           |
+| `CACHE_ENABLED`                                      | bool          | `True`                                             | Globales Caching aktivieren                                       |
+| `CACHE_DIR`                                          | string        | `./cache`                                          | Verzeichnis für Cache-Dateien                                     |
+| `CACHE_DBPEDIA_ENABLED`                              | bool          | `True`                                             | DBpedia SPARQL-Cache aktivieren                                   |
+| `CACHE_WIKIDATA_ENABLED`                             | bool          | `True`                                             | Wikidata-API-Cache aktivieren                                      |
+| `CACHE_WIKIPEDIA_ENABLED`                            | bool          | `True`                                             | Wikipedia-API-Cache aktivieren                                     |
 
-| Parameter | Typ | Standardwert | Beschreibung |
-|-----------|-----|--------------|-------------|
-| `LANGUAGE` | string | `"de"` | Ausgabesprache ("de" oder "en") |
-| `MODEL` | string | `"gpt-4o-mini"` | OpenAI-Modell für die Entitätsextraktion |
-| `MAX_ENTITIES` | int | `10` | Maximale Anzahl der zu extrahierenden/generierenden Entitäten |
-| `USE_WIKIPEDIA` | bool | `True` | Wikipedia-Integration aktivieren |
-| `USE_WIKIDATA` | bool | `True` | Wikidata-Integration aktivieren |
-| `USE_DBPEDIA` | bool | `True` | DBpedia-Integration aktivieren |
-| `TIMEOUT_THIRD_PARTY` | int | `15` | Timeout für externe API-Anfragen in Sekunden |
-| `OPENAI_API_KEY` | string | `None` | OpenAI API-Schlüssel (None = aus Umgebungsvariable laden) |
-| `SHOW_STATUS` | bool | `True` | Status-/Logging-Meldungen anzeigen |
-| `SUPPRESS_TLS_WARNINGS` | bool | `True` | TLS-Warnungen von urllib3 unterdrücken |
-| `COLLECT_TRAINING_DATA` | bool | `False` | Sammelt Trainingsdaten für Finetuning |
-| `TRAINING_DATA_PATH` | string | `"entity_extractor_training_data.jsonl"` | Pfad zur JSONL-Datei für Trainingsdaten |
-| `ALLOWED_ENTITY_TYPES` | string | `"auto"` | Zulässige Entitätstypen: "auto" für alle oder kommagetrennte Liste (z.B. "Person,Organization,Location") |
-| `RELATION_EXTRACTION` | bool | `False` | Beziehungen zwischen Entitäten extrahieren |
-| `ENABLE_RELATIONS_INFERENCE` | bool | `False` | Ergänzt nach expliziten Beziehungen auch implizite Beziehungen durch einen zweiten Prompt (siehe unten, betrifft Beziehungen, nicht Entitäten) |
-| `MODE` | string | `"extract"` | Modus: "extract" (Entitäten aus Text extrahieren), "generate" (Entitäten zu einem Thema generieren) oder "compendium" (Erzeugt Entitäten wie im Generate-Modus, bringt jedoch gezielt Aspekte und Schwerpunkte für ein Bildungs­kompendium ein). |
-| `TEXT_CHUNKING` | bool | `False` | Wenn True, wird langer Text in überlappende Chunks geteilt und stückweise verarbeitet. |
-| `TEXT_CHUNK_SIZE` | int | `2000` | Maximale Zeichenlänge eines Text-Abschnitts (Chunk) beim Chunking. |
-| `TEXT_CHUNK_OVERLAP` | int | `50` | Anzahl sich überlappender Zeichen zwischen aufeinanderfolgenden Chunks. |
-| `ENABLE_KGC` | bool | `False` | Aktiviert nach der Extraktion einen Knowledge Graph Completion-Schritt zur Vervollständigung impliziter Beziehungen. |
-| `KGC_ROUNDS` | int | `3` | Anzahl der Iterationen für die Knowledge Graph Completion (Wert zwischen 1 und 100). |
-| `ENABLE_GRAPH_VISUALIZATION` | bool | `False` | Aktiviert die Ausgabe des Knowledge Graph als PNG und HTML (erfordert RELATION_EXTRACTION=True). |
-| `GRAPH_LAYOUT_METHOD` | string | `"kamada_kawai"` | Layoutmethode für das statische PNG: "kamada_kawai" oder "spring". |
-| `GRAPH_LAYOUT_K` | float or None | `None` | Ideale Kantenlänge im Spring-Layout (nur bei `spring`). |
-| `GRAPH_LAYOUT_ITERATIONS` | int | `100` | Iterationen im Spring-Layout (nur bei `spring`). |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP` | bool | `True` | Überlappungsprävention im Spring-Layout aktivieren (nur bei `spring`). |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE` | float | `0.1` | Mindestabstand für Überlappungsprävention (nur bei `spring`). |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS` | int | `50` | Iterationen für Überlappungsprävention (nur bei `spring`). |
-| `GRAPH_PNG_SCALE` | float | `0.30` | Skalierungsfaktor für statisches PNG-Layout (Standard 0.30). |
-| `GRAPH_HTML_INITIAL_SCALE` | int | `10` | Anfangs-Zoom im interaktiven HTML-Graph (network.moveTo scale). |
-| `CACHE_ENABLED` | bool | `True` | Aktiviert globales Caching für alle Abfragen und Ergebnisse. |
-| `CACHE_DIR` | string | `./cache` | Verzeichnis für Cache-Dateien (Wikipedia, Wikidata, DBpedia). |
-| `CACHE_WIKIPEDIA_ENABLED` | bool | `True` | Cache für Wikipedia-API-Antworten aktivieren. |
-| `CACHE_WIKIDATA_ENABLED` | bool | `True` | Cache für Wikidata-API-Antworten aktivieren. |
-| `CACHE_DBPEDIA_ENABLED` | bool | `True` | Cache für DBpedia SPARQL-Abfragen aktivieren. |
+Alle Einstellungen können via `process_entities(text, user_config)` überschrieben werden.
 
-### Beispiel-Konfiguration
+## Ausgabestruktur
 
-```python
-config = {
-    "LANGUAGE": "en",          # Englische Ausgabe
-    "MODEL": "gpt-4o",         # Leistungsfähigeres Modell verwenden
-    "MAX_ENTITIES": 5,         # Maximal 5 Entitäten extrahieren
-    "TIMEOUT_THIRD_PARTY": 30, # Längeres Timeout für externe APIs
-    "USE_DBPEDIA": True        # DBpedia-Integration aktivieren
-}
-```
+> **Hinweis:** Die tatsächliche Ausgabe kann je nach verwendetem Modell, den Datenquellen und dem Textkontext variieren und ist nicht in allen Fällen vollständig oder korrekt.
 
-### Hinweis:
-Sie müssen nicht alle Konfigurationsparameter angeben – nur jene, die von den Standardwerten in `config/settings.py` abweichen.
-
-## Verwendung
-
-### Einfache Verwendung
-
-```python
-import json
-from entityextractor.core.api import process_entities
-
-text = "Apple und Microsoft sind große Technologieunternehmen."
-result = process_entities(text)
-print(json.dumps(result, ensure_ascii=False, indent=2))
-```
-
-### Erweiterte Verwendung mit Konfiguration
-
-```python
-import json
-from entityextractor.core.api import process_entities
-
-# --- Extraktionsmodus: Entitäten aus Text extrahieren ---
-text = "Albert Einstein war ein theoretischer Physiker."
-config_extract = {
-    "LANGUAGE": "de",              # Ausgabesprache ("de" oder "en")
-    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
-    "MODE": "extract",             # Extraktionsmodus
-    "USE_WIKIPEDIA": True,          # Wikipedia-Integration
-    "USE_WIKIDATA": True,           # Wikidata-Integration
-    "USE_DBPEDIA": False,           # DBpedia-Integration
-    "SHOW_STATUS": True             # Logging-Ausgaben anzeigen
-}
-result = process_entities(text, config_extract)
-print(json.dumps(result, ensure_ascii=False, indent=2))
-
-# --- Generierungsmodus: Entitäten zu einem Thema generieren (inkl. Beziehungen) ---
-topic = "Klassische Mechanik und ihre Anwendungen in der Physik"
-config_generate = {
-    "LANGUAGE": "en",
-    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
-    "MODE": "generate",
-    "MAX_ENTITIES": 10,
-    "USE_WIKIPEDIA": True,
-    "USE_WIKIDATA": True,
-    "USE_DBPEDIA": True,
-    "ALLOWED_ENTITY_TYPES": "Concept,Theory,Law,Formula",
-    "RELATION_EXTRACTION": True,   # Beziehungen zwischen Entitäten generieren
-    "SHOW_STATUS": True
-}
-result = process_entities(topic, config_generate)
-print(json.dumps(result, ensure_ascii=False, indent=2))
-
-# --- Extraktionsmodus mit Chunking und KGC ---
-text = "Apple und Microsoft sind große Technologieunternehmen."
-config_chunking = {
-    "LANGUAGE": "de",
-    "MODEL": "gpt-4o-mini",       # OpenAI-Modell
-    "MODE": "extract",
-    "MAX_ENTITIES": 5,
-    "USE_WIKIPEDIA": True,
-    "USE_WIKIDATA": True,
-    "USE_DBPEDIA": False,
-    "TEXT_CHUNKING": True,
-    "TEXT_CHUNK_SIZE": 2000,
-    "TEXT_CHUNK_OVERLAP": 50,
-    "ENABLE_KGC": True,
-    "KGC_ROUNDS": 3
-}
-result = process_entities(text, config_chunking)
-print(json.dumps(result, ensure_ascii=False, indent=2))
-
-# --- Rückgabe-Struktur ---
-# Das Ergebnis ist ein dict mit mindestens "entities" (Liste) und ggf. "relationships" (Liste von Tripeln)
-# Beispiel:
-# {
-#   "entities": [...],
-#   "relationships": [...],
-#   "knowledgegraph_visualisation": [ ... ]
-# }
-
-# --- Hinweise ---
-# - Für reine Extraktion: MODE="extract" (Standard)
-# - Für Generierung zu einem Thema: MODE="generate" (Topic als String übergeben)
-# - RELATION_EXTRACTION (bzw. INFER_RELATIONSHIPS) aktiviert die Beziehungserkennung
-# - ALLOWED_ENTITY_TYPES: Kommagetrennte Liste oder "auto" für alle Typen
-# - OPENAI_API_KEY: None = aus Umgebungsvariable laden
-# - DBpedia/Wikidata/Wikipedia lassen sich einzeln per USE_DBPEDIA, USE_WIKIDATA, USE_WIKIPEDIA steuern
-```
-
-### Verwendung über die Kommandozeile
-
-Wenn Sie das Paket installiert haben, können Sie es auch über die Kommandozeile verwenden:
-
-```bash
-# Extrahiere Entitäten aus einem Text
-entityextractor --text "Albert Einstein war ein theoretischer Physiker." --language de
-
-# Extrahiere Entitäten aus einer Datei und speichere das Ergebnis
-entityextractor --file input.txt --output result.json --language en --model gpt-4o
-```
-
-## Beispiel-Output
-
-Ein typischer JSON-Output sieht wie folgt aus:
-
+JSON-Output:
 ```json
 {
   "entities": [
     {
-      "entity": "Johann Amos Comenius",
-      "details": {
-        "typ": "Person",
-        "inferred": "explizit",
-        "citation": "Johann Amos Comenius veröffentlichte 1632 sein Werk 'Didactica Magna'...",
-        "citation_start": 0,
-        "citation_end": 117
-      },
-      "sources": {
-        "wikipedia": { "url": "https://de.wikipedia.org/wiki/Johann_Amos_Comenius", "label": "Johann Amos Comenius" }
-      }
+      "entity": "Albert Einstein",
+      "details": { "typ": "Person", "inferred": "explicit", "citation": "...", "citation_start": 0, "citation_end": 52 },
+      "sources": { "wikipedia": { "label": "...", "url": "...", "extract": "..." } }
     },
     {
-      "entity": "Didactica Magna",
-      "details": { "typ": "Werk", "inferred": "explizit" },
-      "sources": { "wikipedia": { "url": "https://de.wikipedia.org/wiki/Didactica_magna", "label": "Didactica magna" } }
+      "entity": "Theory of relativity",
+      "details": { "typ": "Theory", "inferred": "explicit", "citation": "...", "citation_start": 0, "citation_end": 52 },
+      "sources": { "wikipedia": { "label": "...", "url": "...", "extract": "..." } }
     }
   ],
   "relationships": [
     {
-      "subject": "Johann Amos Comenius",
-      "predicate": "veröffentlichte",
-      "object": "Didactica Magna",
+      "subject": "Albert Einstein",
+      "predicate": "developed",
+      "object": "Theory of relativity",
       "inferred": "explicit",
       "subject_type": "Person",
-      "object_type": "Werk",
+      "object_type": "Theory",
       "subject_inferred": "explicit",
       "object_inferred": "explicit"
     }
+  ],
+  "knowledgegraph_visualisation": [
+    { "static": "knowledge_graph.png", "interactive": "knowledge_graph_interactive.html" }
   ]
 }
 ```
 
-## Ausgabestruktur
+**Feldbeschreibung**:
 
-Die Ausgabe ist ein JSON-Objekt mit folgender Struktur, abhängig davon, ob die Beziehungserkennung aktiviert ist oder nicht.
+- **entities**: Liste erkannter Entitäten
+  - **entity**: Name
+  - **details**: Metadaten (Typ, Inferenz-Status, Zitat & Position)
+  - **sources**: Daten aus Wissensquellen (z. B. `wikipedia.extract`)
+- **relationships**: Liste der Tripel
+  - Subjekt, Prädikat, Objekt plus Typ- und Inferenz-Flags
+- **knowledgegraph_visualisation**: Pfade zu generierten Graph-Dateien (PNG & HTML)
 
-### Basisstruktur
+## Anwendungsbeispiele
 
-**Wenn `RELATION_EXTRACTION` deaktiviert ist:**
-
-```json
-[
-  {
-    "entity": "Entität",
-    "details": { ... },
-    "sources": { ... }
-  },
-  ...
-]
-```
-
-**Wenn `RELATION_EXTRACTION` aktiviert ist:**
-
-```json
-{
-  "entities": [ ... ],
-  "relationships": [ ... ],
-  "knowledgegraph_visualisation": [ ... ]
-}
-```
-
-### Entitäten-Struktur
-
-Jede Entität in der `entities`-Liste enthält folgende Eigenschaften:
-
-- **entity**: Der Name der erkannten Entität
-- **details**: Detailinformationen zur Entität
-  - **typ**: Typ/Klasse der Entität (z.B. Person, Organisation, Ort)
-  - **inferred**: Gibt an, ob die Entität explizit im Text erwähnt wird ("explizit") oder aus dem Kontext abgeleitet wurde ("implizit")
-  - **citation**: Textstelle, die die Entität im Originaltext erwähnt
-  - **citation_start**: Startposition der Textstelle
-  - **citation_end**: Endposition der Textstelle
-- **sources**: Informationen aus verschiedenen Quellen
-  - **wikipedia**: Informationen aus Wikipedia
-    - **url**: URL des entsprechenden Wikipedia-Artikels
-    - **label**: Titel des Wikipedia-Artikels
-    - **extract**: Auszug aus dem Wikipedia-Artikel
-
-### Beziehungs-Struktur
-
-Wenn `RELATION_EXTRACTION` aktiviert ist, enthält die Ausgabe eine Liste von Beziehungen zwischen den erkannten Entitäten:
-
-```json
-"relationships": [
-  {
-    "subject": "Johann Amos Comenius",
-    "predicate": "veröffentlichte",
-    "object": "Didactica Magna",
-    "inferred": "explizit",
-    "subject_type": "Person",
-    "object_type": "Werk",
-    "subject_inferred": "explizit",
-    "object_inferred": "explizit"
-  },
-  {
-    "subject": "Didactica Magna",
-    "predicate": "veröffentlicht in",
-    "object": "1632",
-    "inferred": "explizit",
-    "subject_type": "Werk",
-    "object_type": "Zeitraum",
-    "subject_inferred": "explizit",
-    "object_inferred": "explizit"
-  },
-  {
-    "subject": "Didactica Magna",
-    "predicate": "ist grundlage von",
-    "object": "Pädagogik",
-    "inferred": "explizit",
-    "subject_type": "Werk",
-    "object_type": "Wissenschaft",
-    "subject_inferred": "explizit",
-    "object_inferred": "explizit"
-  }
-]
-```
-
-Jede Beziehung besteht aus:
-- **subject**: Die Quell-Entität der Beziehung
-- **predicate**: Die Art der Beziehung (z.B. "veröffentlichte", "ist Teil von")
-- **object**: Die Ziel-Entität der Beziehung
-- **inferred**: Gibt an, ob die Beziehung explizit im Text erwähnt wird ("explizit") oder aus dem Kontext abgeleitet wurde ("implizit")
-- **subject_type**: Der Typ der Quell-Entität
-- **object_type**: Der Typ der Ziel-Entität
-- **subject_inferred**: Gibt an, ob die Quell-Entität explizit im Text erwähnt wird ("explizit") oder aus dem Kontext abgeleitet wurde ("implizit")
-- **object_inferred**: Gibt an, ob die Ziel-Entität explizit im Text erwähnt wird ("explizit") oder aus dem Kontext abgeleitet wurde ("implizit")
-
-## Tipps
-
-### Optimale Spracheinstellungen
-
-- **Für deutschsprachige Texte**:
-  ```python
-  config = {"LANGUAGE": "de"}
-  ```
-  Dies liefert deutsche Beschreibungen und bevorzugt deutsche Wikipedia-Artikel.
-
-- **Für englischsprachige Texte**:
-  ```python
-  config = {"LANGUAGE": "en"}
-  ```
-  Dies liefert englische Beschreibungen und bevorzugt englische Wikipedia-Artikel.
-
-### Modellauswahl nach Anwendungsfall
-
-- **Für schnelle Verarbeitung mit guter Qualität**:
-  ```python
-  config = {"MODEL": "gpt-4o-mini"}
-  ```
-
-- **Für höchste Genauigkeit bei der Entitätserkennung**:
-  ```python
-  config = {"MODEL": "gpt-4o"}
-  ```
-
-### Performance-Optimierung
-
-- **Schnellere Verarbeitung** (ohne DBpedia):
-  ```python
-  config = {"USE_DBPEDIA": False, "USE_WIKIDATA": True}
-  ```
-
-- **Nur grundlegende Informationen** (minimale API-Aufrufe):
-  ```python
-  config = {"USE_WIKIDATA": False, "USE_DBPEDIA": False}
-  ```
-
-- **Maximale Informationstiefe** (alle Quellen):
-  ```python
-  config = {"USE_WIKIPEDIA": True, "USE_WIKIDATA": True, "USE_DBPEDIA": True}
-  ```
-
-### Logging und Debugging
-
-- **Ausführliches Logging für Debugging**:
-  ```python
-  config = {"SHOW_STATUS": True}
-  ```
-
-- **Stille Ausführung für Produktionsumgebungen**:
-  ```python
-  config = {"SHOW_STATUS": False}
-  ```
-
-### Trainingsdatensammlung
-
-Die Anwendung bietet die Möglichkeit, Trainingsdaten für das Finetuning bei OpenAI zu sammeln. Dies ist besonders nützlich, um die Entitätserkennung mit korrigierten URLs und Metadaten zu verbessern.
-
+### Einfaches Python-Beispiel
 ```python
-config = {
-    "COLLECT_TRAINING_DATA": True,  # Aktiviert die Sammlung von Trainingsdaten
-    "TRAINING_DATA_PATH": "meine_trainingsdaten.jsonl"  # Pfad zur JSONL-Datei für Trainingsdaten
-}
+from entityextractor.core.api import process_entities
+import json
+
+text = "Albert Einstein entwickelte die Relativitätstheorie."
+result = process_entities(text)
+print(json.dumps(result, indent=2, ensure_ascii=False))
 ```
 
-Wenn aktiviert, speichert die Anwendung für jede Extraktion folgende Informationen:
-- Den Originaltext
-- Die erkannten Entitäten mit ihren Typen
-- Die korrekten Wikipedia-, Wikidata- und DBpedia-Links
+### 1. Entitäten extrahieren
 
-Diese Daten werden im JSONL-Format gespeichert und können direkt für das Finetuning eigener OpenAI-Modelle verwendet werden. Durch das Training mit diesen Daten kann die Genauigkeit der Entitätserkennung und -verknüpfung erheblich verbessert werden, insbesondere für domänenspezifische Anwendungen.
+```bash
+python example_extract.py
+```
+
+### 2. Entitäten generieren
+
+```bash
+python example_generate.py
+```
+
+### 3. Relationen erkennen und inferieren
+
+```bash
+python example_relations.py
+```
+
+### 4. Knowledge Graph generieren
+
+```bash
+python example_knowledgegraph.py
+```
+
+Mehr Details findest du in den Beispielskripten im Repository.
+
+## Tipps und Best Practices
+
+- **Sprachauswahl**: Setze `LANGUAGE` auf `"de"` für deutsche oder `"en"` für englische Ausgaben.
+- **Modellauswahl**: Verwende `MODEL: "gpt-4o"` für höchste Genauigkeit, `"gpt-4o-mini"` für schnellere Ergebnisse.
+- **Performance**: Deaktiviere `USE_DBPEDIA` oder `USE_WIKIDATA`, um API-Aufrufe zu reduzieren.
+- **Chunking und KGC**: Aktiviere `TEXT_CHUNKING` und `ENABLE_KGC` für lange Texte und vollständige Graphen.
+- **Logging**: Setze `SHOW_STATUS` auf `True` für detaillierte Ausgaben beim Debugging.
 
 ## Fehlerbehebung
 
-### Häufige Probleme und Lösungen
-
 | Problem | Lösung |
 |---------|--------|
-| **Timeout bei externen APIs** | Erhöhen Sie den Wert von `TIMEOUT_THIRD_PARTY` auf 30 oder mehr Sekunden |
-| **Keine Verbindung zu DBpedia** | Prüfen Sie Ihre Internetverbindung oder deaktivieren Sie DBpedia mit `USE_DBPEDIA: False` |
-| **Probleme mit deutschen DBpedia-Servern** | Verwenden Sie englische Server mit `DBPEDIA_USE_DE: False` |
-| **OpenAI API-Fehler** | Prüfen Sie, ob Ihr API-Schlüssel gültig ist und als Umgebungsvariable gesetzt wurde |
-| **Keine Entitäten gefunden** | Verwenden Sie ein leistungsfähigeres Modell wie `MODEL: "gpt-4o"` |
-| **Falsche Entitäten erkannt** | Prüfen Sie die Spracheinstellung und verwenden Sie ein besseres Modell |
-
-### Logging für Debugging
-
-Für detaillierte Fehleranalyse aktivieren Sie das Logging:
-
-```python
-config = {"SHOW_STATUS": True}
-```
+| **Timeout bei externen APIs** | Erhöhe `TIMEOUT_THIRD_PARTY` auf ≥30 Sekunden |
+| **Keine Verbindung zu DBpedia** | Prüfe Netzwerk oder deaktiviere DBpedia (`USE_DBPEDIA: False`) |
+| **Wikidata liefert keine Ergebnisse** | Aktiviere mehrsprachige Suche (`USE_WIKIDATA: True`) und teste alternative Synonyme |
+| **OpenAI API-Fehler** | Verifiziere `OPENAI_API_KEY` und Modell-Kompatibilität |
+| **Keine Entitäten gefunden** | Erhöhe `MAX_ENTITIES` oder wechsle zu leistungsfähigerem Modell |
 
 ## Erweiterung
 
-### Eigene Datenquellen hinzufügen
-
-1. Erstellen Sie ein neues Service-Modul in `entityextractor/services/`
-2. Implementieren Sie die Funktionen zum Abrufen und Verarbeiten der Daten
-3. Integrieren Sie den Service in `entityextractor/core/linker.py`
-4. Fügen Sie Konfigurationsoptionen in `entityextractor/config/settings.py` hinzu
-
-### Anpassung der Entitätsextraktion
-
-Sie können die Entitätsextraktion anpassen, indem Sie:
-
-1. Den Prompt in `entityextractor/services/openai_service.py` ändern
-2. Eigene Nachverarbeitungslogik in `entityextractor/core/extractor.py` implementieren
-3. Zusätzliche Metadaten in der Ausgabe in `entityextractor/core/api.py` hinzufügen
+1. **Neue Datenquellen**: Erstelle ein Modul in `entityextractor/services/`, implementiere Abruf- und Verarbeitungsfunktionen, integriere es im `linker`.
+2. **Prompt-Anpassung**: Passe Prompts in `entityextractor/services/openai_service.py` an.
+3. **Nachverarbeitung**: Ergänze eigene Logik in `entityextractor/core/extractor.py` oder in `core/api.py`.
+4. **Konfiguration**: Füge neue Optionen in `config/settings.py` `DEFAULT_CONFIG` hinzu.
 
 ## Lizenz
 
-Dieses Projekt ist unter der Apache 2.0 Lizenz veröffentlicht. Details siehe [LICENSE](LICENSE).
+Dieses Projekt steht unter der Apache License 2.0. Siehe [LICENSE](LICENSE) für Details.
 
-Weitere rechtliche Hinweise findest du in der [NOTICE](NOTICE)-Datei.
+## NOTICE
 
-## Autor
-
-**Jan Schachtschabel**
+Für Namensnennung und weitere rechtliche Hinweise siehe die [NOTICE](NOTICE) Datei.

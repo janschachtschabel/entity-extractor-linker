@@ -23,9 +23,12 @@ entities = process_entities(
 
         # === Data Source Parameters ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-        "USE_WIKIDATA": True,     # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": True,      # DBpedia-Verknüpfung aktivieren
+        "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
+        "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+        "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
+        "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
+        "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
         "ADDITIONAL_DETAILS": True,  # Zusätzliche Entitätsdetails aus den Wissensquellen abrufen
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 

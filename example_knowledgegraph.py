@@ -26,6 +26,9 @@ entities = process_entities(
         "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
         "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+        "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
+        "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
+        "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
         "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
@@ -35,11 +38,11 @@ entities = process_entities(
         "MODE": "extract",         # Modus (extract, generate, compendium)
         "LANGUAGE": "de",          # Sprache (de, en)
         "SHOW_STATUS": True,       # Statusmeldungen anzeigen
-        "ENABLE_ENTITY_INFERENCE": False, # Entity-Inferenz aktivieren
+        "ENABLE_ENTITY_INFERENCE": True, # Entity-Inferenz aktivieren
 
         # === RELATION PARAMETERS ===
         "RELATION_EXTRACTION": True,  # Relationsextraktion aktivieren
-        "ENABLE_RELATIONS_INFERENCE": False,  # Implizite Relationen aktivieren
+        "ENABLE_RELATIONS_INFERENCE": True,  # Implizite Relationen aktivieren
 
         # === OTHER SETTINGS ===
         "SUPPRESS_TLS_WARNINGS": True, # TLS-Warnungen unterdrücken
@@ -51,7 +54,7 @@ entities = process_entities(
         "TEXT_CHUNK_OVERLAP": 50,  # Chunk-Überlappung
         
         # === KNOWLEDGE GRAPH COMPLETION ===
-        "ENABLE_KGC": True,       # Knowledge Graph Completion aktivieren
+        "ENABLE_KGC": False,       # Knowledge Graph Completion aktivieren
         "KGC_ROUNDS": 2,            # Anzahl KGC-Runden
 
         # === GRAPH-VISUALISIERUNG ===

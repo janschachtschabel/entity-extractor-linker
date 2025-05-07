@@ -28,6 +28,9 @@ def main():
         "USE_WIKIDATA": True,      # Wikidata-Verknüpfung aktivieren
         "USE_DBPEDIA": False,       # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+        "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
+        "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
+        "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
         "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
@@ -76,9 +79,9 @@ def main():
     
     # Übersichtliche Kurzfassung der Entitäten
     print("\nExtrahierte Entitäten:")
-    print("-" * 100)
-    print(f"{'Nr':3} | {'Name':25} | {'Typ':15} | {'Inferred':10} | {'Wikipedia':25} | {'Wikidata':15} | {'DBpedia':20}")
-    print("-" * 100)
+    print("-" * 166)
+    print(f"{'Nr':3} | {'Name':25} | {'Typ':15} | {'Inferred':10} | {'Wiki-URL':60} | {'Wikidata':15} | {'DBpedia':20}")
+    print("-" * 166)
     
     for i, entity in enumerate(entities):
         # Basisinformationen
@@ -94,10 +97,8 @@ def main():
             entity_type = entity["details"]["typ"]
         
         # Wikipedia-Informationen
-        wiki_label = ""
         wiki_url = ""
         if "sources" in entity and "wikipedia" in entity["sources"]:
-            wiki_label = entity["sources"]["wikipedia"].get("label", "")[:25]
             wiki_url = entity["sources"]["wikipedia"].get("url", "")
         
         # Wikidata-Informationen
@@ -118,9 +119,9 @@ def main():
         inferred = entity.get('details', {}).get('inferred', entity.get('inferred', ''))
         
         # Zeile ausgeben
-        print(f"{i+1:3} | {name:25} | {entity_type:15} | {inferred:10} | {wiki_label:25} | {wikidata_id:15} | {dbpedia_title:20}")
+        print(f"{i+1:3} | {name:25} | {entity_type:15} | {inferred:10} | {wiki_url:60} | {wikidata_id:15} | {dbpedia_title:20}")
     
-    print("-" * 100)
+    print("-" * 166)
     print(f"Insgesamt {len(entities)} Entitäten gefunden.")
     
     # Wenn Beziehungen vorhanden sind, diese in Tabellen ausgeben

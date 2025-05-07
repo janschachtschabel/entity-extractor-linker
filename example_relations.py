@@ -38,8 +38,11 @@ def main():
         # === Data Source Parameters ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
         "USE_WIKIDATA": True,      # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": True,       # DBpedia-Verknüpfung aktivieren
+        "USE_DBPEDIA": False,       # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
+        "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
+        "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
+        "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
         "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
         "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
@@ -53,7 +56,7 @@ def main():
 
         # === Relation Parameters ===
         "RELATION_EXTRACTION": True,          # Relationsextraktion aktivieren
-        "ENABLE_RELATIONS_INFERENCE": False,  # Implizite Relationen aktivieren
+        "ENABLE_RELATIONS_INFERENCE": True,  # Implizite Relationen aktivieren
 
         # === Other Settings ===
         "SUPPRESS_TLS_WARNINGS": True, # TLS-Warnungen unterdrücken
@@ -114,6 +117,8 @@ def main():
                 wikidata_label = entity["sources"]["wikidata"].get("label", "")[:15]
             
             # DBpedia-Informationen
+            dbpedia_title = ""
+            dbpedia_uri = ""
             if "sources" in entity and "dbpedia" in entity["sources"]:
                 src = entity["sources"]["dbpedia"]
                 # title aus dbpedia_title oder title
