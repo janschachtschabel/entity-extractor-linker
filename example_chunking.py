@@ -36,7 +36,7 @@ config = {
     "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
 
     # === Entity Extraction Parameters ===
-    "MAX_ENTITIES": 20,        # Max. Anzahl Entitäten
+    "MAX_ENTITIES": 15,        # Max. Anzahl Entitäten
     "ALLOWED_ENTITY_TYPES": "auto", # Entitätstypen automatisch filtern
     "MODE": "extract",         # Modus: extrahieren
     "LANGUAGE": "de",          # Sprache

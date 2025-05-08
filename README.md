@@ -3,7 +3,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/janschachtschabel/entity-extractor-linker)
 
-Entity Extractor & Linker ist ein flexibles, modulares Tool zur automatisierten Erkennung, Extraktion und Anreicherung von Named Entities in beliebigen Texten. Es verwendet leistungsstarke LLMs, um erkannte Entitäten direkt mit Informationen aus Wikipedia, Wikidata und DBpedia zu verknüpfen – inklusive mehrsprachiger Ausgaben (Deutsch, Englisch). Die Ergebnisse liegen in einer strukturierten JSON-Ausgabe vor, die Metadaten zu Entitäten und (optional) Beziehungen enthält. Beziehungen können als explizite oder implizite Triple (Subjekt–Prädikat–Objekt) generiert und in interaktiven Knowledge Graphen visualisiert werden.
+Entity Extractor & Linker ist ein flexibles, modulares Tool zur automatisierten Extraktion und Generierung von Named Entities in bzw. zu beliebigen Texten. Es kann erkannte Entitäten direkt mit Informationen aus Wikipedia, Wikidata und DBpedia verknüpfen – inklusive mehrsprachiger Ausgaben (Deutsch, Englisch). Die Ergebnisse liegen in einer strukturierten JSON-Ausgabe vor, die Metadaten zu Entitäten und (optional) Beziehungen enthält. Beziehungen können als explizite (aus dem Text extrahierte) oder implizite (logisch geschlussfolgerte) Triple (Subjekt–Prädikat–Objekt) generiert und in interaktiven Knowledge Graphen visualisiert werden.
 
 ## Inhaltsverzeichnis
 
@@ -11,7 +11,6 @@ Entity Extractor & Linker ist ein flexibles, modulares Tool zur automatisierten 
 - [Funktionen](#funktionen)
 - [Anwendungsbeispiele](#anwendungsbeispiele)
 - [Projektstruktur](#projektstruktur)
-- [Vorteile](#vorteile)
 - [Pipeline-Übersicht](#pipeline-übersicht)
 - [Funktionsweise](#funktionsweise)
 - [Tipps und Best Practices](#tipps-und-best-practices)
@@ -45,6 +44,7 @@ export OPENAI_API_KEY="<dein_api_key>"
 - **Entitäten extrahieren**: Direkt aus Texten identifizieren (extrahieren).
 - **Entitäten generieren**: Kontextbasiert neue Entitäten vorschlagen (generieren).
 - **Beziehungsextraktion**: Explizite Beziehungen (Subjekt; Prädikat; Objekt) im Text erkennen.
+- **Entitäteninferenz**: Implizite logische Knoten ergänzen und Knowledge Graph vervollständigen.
 - **Beziehungsinferenz**: Implizite logische Verbindungen ergänzen und Knowledge Graph vervollständigen.
 - **Knowledge Graph Completion (KGC)**: Fehlende Relationen in mehreren Runden automatisch generieren.
 - **Graph-Visualisierung**: Erzeuge statische PNG-Graphen oder interaktive HTML-Ansichten.
@@ -52,6 +52,8 @@ export OPENAI_API_KEY="<dein_api_key>"
 - **LLM-Schnittstelle**: Kompatibel mit OpenAI-API, anpassbare Basis-URL und Modell.
 - **Wissensquellen-Integration**: Wikipedia, Wikidata, DBpedia (SPARQL + Lookup API Fallback).
 - **Caching**: Zwischenspeicherung von API-Antworten für schnellere wiederholte Zugriffe.
+- **Ratelimiter**: Fängt Fehler mit Ratelimits der Wissensquellen ab.
+- **Statistiken**: Vorberechnete Statistiken u.a. zu gehäuft auftretenen Kategorien.
 
 ## Anwendungsbeispiele
 
@@ -61,8 +63,8 @@ from entityextractor.core.api import process_entities
 
 text = "Albert Einstein war ein theoretischer Physiker."
 config = {
-    "LANGUAGE": "de",
-    "MODEL": "gpt-4o-mini",
+    "LANGUAGE": "en",
+    "MODEL": "gpt-4.1-mini",
     "MODE": "extract",
     "USE_WIKIPEDIA": True
 }
