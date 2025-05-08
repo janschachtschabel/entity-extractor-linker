@@ -246,60 +246,60 @@ Alle Einstellungen liegen in `entityextractor/config/settings.py` unter `DEFAULT
 
 | Parameter                               | Typ                  | Standardwert                                 | Beschreibung |
 |-----------------------------------------|----------------------|----------------------------------------------|--------------|
-| `LLM_BASE_URL`                          | string               | `"https://api.openai.com/v1"`              | Basis-URL für die LLM-API |
-| `MODEL`                                 | string               | `"gpt-4.1-mini"`                           | LLM-Modell |
-| `OPENAI_API_KEY`                        | string or None       | `None`                                       | OpenAI API-Schlüssel (aus Umgebungsvariable laden) |
-| `MAX_TOKENS`                            | int                  | `16000`                                      | Maximale Tokenanzahl pro Anfrage |
-| `TEMPERATURE`                           | float                | `0.2`                                        | Sampling-Temperatur |
-| `USE_WIKIPEDIA`                         | bool                 | `True`                                       | Wikipedia-Verknüpfung aktivieren |
-| `USE_WIKIDATA`                          | bool                 | `False`                                      | Wikidata-Verknüpfung aktivieren |
-| `USE_DBPEDIA`                           | bool                 | `False`                                      | DBpedia-Verknüpfung aktivieren |
-| `ADDITIONAL_DETAILS`                    | bool                 | `False`                                      | Zusätzliche Details aus Wissensquellen aktivieren |
-| `DBPEDIA_USE_DE`                        | bool                 | `False`                                      | Deutsche DBpedia-Server zuerst abfragen |
-| `DBPEDIA_LOOKUP_API`                    | bool                 | `False`                                      | Fallback via DBpedia Lookup API aktivieren |
-| `DBPEDIA_SKIP_SPARQL`                   | bool                 | `False`                                      | Nur Lookup API verwenden, keine SPARQL-Abfragen |
-| `DBPEDIA_LOOKUP_MAX_HITS`               | int                  | `5`                                          | Maximale Trefferzahl für Lookup API |
-| `DBPEDIA_LOOKUP_CLASS`                  | string or None       | `None`                                       | Optionale Ontologie-Klasse für Lookup API |
-| `DBPEDIA_LOOKUP_FORMAT`                 | string               | `"json"`                                   | Antwortformat: `"json"`, `"xml"` oder `"both"` |
-| `LANGUAGE`                              | string               | `"en"`                                     | Sprache der Verarbeitung ("de" oder "en") |
-| `TEXT_CHUNKING`                         | bool                 | `False`                                      | Text-Chunking aktivieren |
-| `TEXT_CHUNK_SIZE`                       | int                  | `2000`                                       | Zeichen pro Chunk |
-| `TEXT_CHUNK_OVERLAP`                    | int                  | `50`                                         | Überlappung zwischen Chunks |
-| `MODE`                                  | string               | `"extract"`                                | Modus: "extract", "generate" oder "compendium" |
-| `MAX_ENTITIES`                          | int                  | `20`                                         | Maximale Anzahl der Entitäten |
-| `ALLOWED_ENTITY_TYPES`                  | string               | `"auto"`                                   | Filter für erlaubte Entitätstypen ("auto" oder kommagetrennte Liste) |
-| `ENABLE_ENTITY_INFERENCE`               | bool                 | `False`                                      | Implizite Entitätserkennung aktivieren |
-| `RELATION_EXTRACTION`                   | bool                 | `False`                                      | Beziehungen zwischen Entitäten extrahieren |
-| `ENABLE_RELATIONS_INFERENCE`            | bool                 | `False`                                      | Implizite Beziehungen ergänzen |
-| `MAX_RELATIONS`                         | int                  | `15`                                         | Maximale Anzahl der Beziehungen pro Prompt |
-| `ENABLE_KGC`                            | bool                 | `False`                                      | Knowledge Graph Completion aktivieren |
-| `KGC_ROUNDS`                            | int                  | `3`                                          | Anzahl der KGC-Runden |
-| `COLLECT_TRAINING_DATA`                 | bool                 | `False`                                      | Trainingsdatensammlung aktivieren |
-| `OPENAI_TRAINING_DATA_PATH`             | string               | `"entity_extractor_training_openai.jsonl"` | Pfad für Entitäts-Trainingdaten |
-| `OPENAI_RELATIONSHIP_TRAINING_DATA_PATH`| string               | `"entity_relationship_training_openai.jsonl"` | Pfad für Beziehungs-Trainingdaten |
-| `TIMEOUT_THIRD_PARTY`                   | int                  | `15`                                         | Timeout für externe Dienste (Sekunden) |
-| `SHOW_STATUS`                           | bool                 | `True`                                       | Status-/Logging-Meldungen anzeigen |
-| `SUPPRESS_TLS_WARNINGS`                 | bool                 | `True`                                       | TLS-Warnungen unterdrücken |
-| `ENABLE_GRAPH_VISUALIZATION`            | bool                 | `False`                                      | Statische PNG- und HTML-Graphen aktivieren (setzt RELATION_EXTRACTION voraus) |
-| `GRAPH_LAYOUT_METHOD`                   | string               | `"spring"`                                 | Layoutmethode für statisches PNG: "spring" oder "kamada_kawai" |
-| `GRAPH_LAYOUT_K`                        | float or None        | `None`                                       | Ideale Kantenlänge im Spring-Layout |
-| `GRAPH_LAYOUT_ITERATIONS`               | int                  | `50`                                         | Iterationen für Spring-Layout |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP`         | bool                 | `True`                                       | Überlappungsprävention im Spring-Layout aktivieren |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE`| float                | `0.1`                                        | Mindestabstand zwischen Knoten |
-| `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS`| int                | `50`                                         | Iterationen der Überlappungsprävention |
-| `GRAPH_PNG_SCALE`                       | float                | `0.30`                                       | Skalierungsfaktor für das statische PNG-Layout |
-| `GRAPH_HTML_INITIAL_SCALE`              | int                  | `10`                                         | Anfangs-Zoom im interaktiven HTML-Graph |
-| `CACHE_ENABLED`                         | bool                 | `True`                                       | Globales Caching aktivieren |
-| `CACHE_DIR`                             | string               | `"./cache"`                                | Verzeichnis für Cache-Dateien |
-| `CACHE_WIKIPEDIA_ENABLED`               | bool                 | `True`                                       | Cache für Wikipedia-API aktivieren |
-| `CACHE_WIKIDATA_ENABLED`                | bool                 | `True`                                       | Cache für Wikidata-API aktivieren |
-| `CACHE_DBPEDIA_ENABLED`                 | bool                 | `True`                                       | Cache für DBpedia SPARQL aktivieren |
-| `RATE_LIMIT_MAX_CALLS`                  | int                  | `3`                                          | Maximale Anzahl an API-Aufrufen pro Zeitraum (`RATE_LIMIT_PERIOD`) |
-| `RATE_LIMIT_PERIOD`                     | int                  | `1`                                          | Zeitraum (Sekunden) für das Rate-Limiter-Fenster |
-| `RATE_LIMIT_BACKOFF_BASE`               | int                  | `1`                                          | Basiswert für exponentielles Backoff bei HTTP 429 |
-| `RATE_LIMIT_BACKOFF_MAX`                | int                  | `60`                                         | Maximale Backoff-Dauer (Sekunden) bei HTTP 429 |
-| `USER_AGENT`                            | string               | `"EntityExtractor/1.0"`                    | HTTP `User-Agent`-Header für alle API-Anfragen |
-| `WIKIPEDIA_MAXLAG`                      | int                  | `5`                                          | `maxlag`-Parameter für Wikipedia-API-Anfragen |
+| `LLM_BASE_URL`                           | string               | `"https://api.openai.com/v1"`              | Base-URL für die LLM-API |
+| `MODEL`                                  | string               | `"gpt-4.1-mini"`                           | LLM-Modell (empfohlen: gpt-4.1-mini, gpt-4o-mini) |
+| `OPENAI_API_KEY`                         | string or None       | `None`                                      | API-Key setzen oder aus Umgebungsvariable (Standard: None) |
+| `MAX_TOKENS`                             | int                  | `16000`                                      | Maximale Tokenanzahl pro Anfrage |
+| `TEMPERATURE`                            | float                | `0.2`                                        | Sampling-Temperatur |
+| `LANGUAGE`                               | string               | `"en"`                                     | Sprache der Verarbeitung (de oder en) |
+| `TEXT_CHUNKING`                          | bool                 | `False`                                      | Text-Chunking aktivieren (False = ein LLM-Durchgang) |
+| `TEXT_CHUNK_SIZE`                        | int                  | `1000`                                       | Chunk-Größe in Zeichen |
+| `TEXT_CHUNK_OVERLAP`                     | int                  | `50`                                         | Überlappung zwischen Chunks in Zeichen |
+| `MODE`                                   | string               | `"extract"`                                | Modus: "extract", "generate" oder "compendium" |
+| `MAX_ENTITIES`                           | int                  | `15`                                         | Maximale Anzahl extrahierter Entitäten |
+| `ALLOWED_ENTITY_TYPES`                   | string               | `"auto"`                                   | Automatische Filterung erlaubter Entitätstypen |
+| `ENABLE_ENTITY_INFERENCE`                | bool                 | `False`                                      | Implizite Entitätserkennung aktivieren |
+| `RELATION_EXTRACTION`                    | bool                 | `True`                                       | Relationsextraktion aktivieren |
+| `ENABLE_RELATIONS_INFERENCE`             | bool                 | `False`                                      | Implizite Relationen aktivieren |
+| `MAX_RELATIONS`                          | int                  | `15`                                         | Maximale Anzahl Beziehungen pro Prompt |
+| `USE_WIKIPEDIA`                          | bool                 | `True`                                       | Wikipedia-Verknüpfung aktivieren (immer True) |
+| `USE_WIKIDATA`                           | bool                 | `False`                                      | Wikidata-Verknüpfung aktivieren |
+| `USE_DBPEDIA`                            | bool                 | `False`                                      | DBpedia-Verknüpfung aktivieren |
+| `DBPEDIA_USE_DE`                         | bool                 | `False`                                      | Deutsche DBpedia nutzen (Standard: False = englische DBpedia) |
+| `ADDITIONAL_DETAILS`                     | bool                 | `False`                                      | Zusätzliche Details aus allen Wissensquellen abrufen (mehr Infos aber langsamer) |
+| `DBPEDIA_LOOKUP_API`                     | bool                 | `True`                                       | Fallback via DBpedia Lookup API aktivieren |
+| `DBPEDIA_SKIP_SPARQL`                    | bool                 | `False`                                      | SPARQL-Abfragen überspringen und nur Lookup-API verwenden |
+| `DBPEDIA_LOOKUP_MAX_HITS`                | int                  | `5`                                          | Maximale Trefferzahl für Lookup-API |
+| `DBPEDIA_LOOKUP_CLASS`                   | string or None       | `None`                                       | Optionale DBpedia-Ontology-Klasse für Lookup-API (derzeit ungenutzt) |
+| `DBPEDIA_LOOKUP_FORMAT`                  | string               | `"xml"`                                    | Response-Format: "json", "xml" (empfohlen) oder "beide" (maximale Details) |
+| `ENABLE_GRAPH_VISUALIZATION`             | bool                 | `False`                                      | Statische PNG- und interaktive HTML-Ansicht aktivieren (erfordert RELATION_EXTRACTION=True) |
+| `ENABLE_KGC`                             | bool                 | `False`                                      | Knowledge-Graph-Completion aktivieren (Vervollständigung mit impliziten Relationen) |
+| `KGC_ROUNDS`                             | int                  | `3`                                          | Anzahl der KGC-Runden |
+| `GRAPH_LAYOUT_METHOD`                    | string               | `"spring"`                                 | Layoutmethode für statisches PNG: "spring" oder "kamada_kawai" |
+| `GRAPH_LAYOUT_K`                         | float or None        | `None`                                       | Ideale Kantenlänge im Spring-Layout (None=Standard) |
+| `GRAPH_LAYOUT_ITERATIONS`                | int                  | `50`                                         | Iterationen für Spring-Layout |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP`          | bool                 | `True`                                       | Überlappungsprävention im Spring-Layout aktivieren |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE` | float                | `0.1`                                        | Mindestabstand zwischen Knoten |
+| `GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS`| int                 | `50`                                         | Iterationen zur Überlappungsprävention |
+| `GRAPH_PNG_SCALE`                        | float                | `0.30`                                       | Skalierungsfaktor für das statische PNG-Layout (Standard 0.33) |
+| `GRAPH_HTML_INITIAL_SCALE`               | int                  | `10`                                         | Anfangs-Zoom im interaktiven HTML-Graph |
+| `COLLECT_TRAINING_DATA`                  | bool                 | `False`                                      | Trainingsdaten für Fine-Tuning sammeln |
+| `OPENAI_TRAINING_DATA_PATH`              | string               | `"entity_extractor_training_openai.jsonl"` | Pfad für Entitäts-Trainingsdaten |
+| `OPENAI_RELATIONSHIP_TRAINING_DATA_PATH` | string               | `"entity_relationship_training_openai.jsonl"` | Pfad für Beziehungs-Trainingsdaten |
+| `TIMEOUT_THIRD_PARTY`                    | int                  | `15`                                         | Timeout für externe Dienste (Sekunden) |
+| `RATE_LIMIT_MAX_CALLS`                   | int                  | `3`                                          | Maximale Anzahl an API-Aufrufen pro Zeitraum (`RATE_LIMIT_PERIOD`) |
+| `RATE_LIMIT_PERIOD`                      | int                  | `1`                                          | Zeitraum (Sekunden) für das Rate-Limiter-Fenster |
+| `RATE_LIMIT_BACKOFF_BASE`                | int                  | `1`                                          | Basiswert für exponentielles Backoff bei HTTP 429 |
+| `RATE_LIMIT_BACKOFF_MAX`                 | int                  | `60`                                         | Maximale Backoff-Dauer (Sekunden) bei HTTP 429 |
+| `USER_AGENT`                             | string               | `"EntityExtractor/1.0"`                    | HTTP User-Agent-Header für alle API-Anfragen |
+| `WIKIPEDIA_MAXLAG`                       | int                  | `5`                                          | Maxlag-Parameter für Wikipedia-API-Anfragen |
+| `CACHE_ENABLED`                          | bool                 | `True`                                       | Caching global aktivieren oder deaktivieren |
+| `CACHE_DIR`                              | string               | `"./cache"`                                | Verzeichnis für Cache-Dateien |
+| `CACHE_DBPEDIA_ENABLED`                  | bool                 | `True`                                       | Caching für DBpedia-SPARQL-Abfragen aktivieren |
+| `CACHE_WIKIDATA_ENABLED`                 | bool                 | `True`                                       | Caching für Wikidata-API aktivieren |
+| `CACHE_WIKIPEDIA_ENABLED`                | bool                 | `True`                                       | Caching für Wikipedia-API-Anfragen aktivieren |
+| `SHOW_STATUS`                            | bool                 | `True`                                       | Statusmeldungen anzeigen |
+| `SUPPRESS_TLS_WARNINGS`                  | bool                 | `True`                                       | TLS-Warnungen unterdrücken |
 
 ## Ausgabestruktur
 
