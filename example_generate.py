@@ -189,107 +189,63 @@ def main():
             if url:
                 print(f"{i+1}. {name}: {url}")
     
-    # Statistiken ausgeben
-    print(f"\nStatistiken:")
-    print(f"Anzahl generierter Entitäten: {len(entities)}")
-    
-    # Typen zählen
-    entity_types = {}
-    for entity in entities:
-        entity_type = entity["details"]["typ"]
-        entity_types[entity_type] = entity_types.get(entity_type, 0) + 1
-    
-    print("\nVerteilung der Entitätstypen:")
-    for entity_type, count in entity_types.items():
-        print(f"  {entity_type}: {count}")
-    
-    # Anzahl der Entitäten mit Wikipedia-URL
-    with_wikipedia = sum(1 for entity in entities if "wikipedia" in entity["sources"])
-    print(f"\nEntitäten mit Wikipedia-URL: {with_wikipedia} ({with_wikipedia/len(entities)*100:.1f}%)")
-    
-    # Anzahl der Entitäten mit Wikidata-ID
-    with_wikidata = sum(1 for entity in entities if "wikidata" in entity["sources"])
-    print(f"Entitäten mit Wikidata-ID: {with_wikidata} ({with_wikidata/len(entities)*100:.1f}%)")
-    
-    # Anzahl der Entitäten mit DBpedia-Informationen
-    with_dbpedia = sum(1 for entity in entities if "dbpedia" in entity["sources"])
-    print(f"Entitäten mit DBpedia-Informationen: {with_dbpedia} ({with_dbpedia/len(entities)*100:.1f}%)")
-    
-    # Analyse der sich überschneidenden Wikidata- und DBpedia-Typen
-    print("\nAnalyse der Wikidata-Typen:")
-    wikidata_types = {}
-    for entity in entities:
-        if "wikidata" in entity["sources"] and "types" in entity["sources"]["wikidata"]:
-            for wtype in entity["sources"]["wikidata"]["types"]:
-                wikidata_types[wtype] = wikidata_types.get(wtype, 0) + 1
-    
-    # Sortiere nach Häufigkeit
-    sorted_wikidata_types = sorted(wikidata_types.items(), key=lambda x: x[1], reverse=True)
-    for wtype, count in sorted_wikidata_types[:10]:  # Top 10 anzeigen
-        if count > 1:  # Nur Typen anzeigen, die mehr als einmal vorkommen
-            print(f"  {wtype}: {count}")
-    
-    print("\nAnalyse der DBpedia-Typen:")
-    dbpedia_types = {}
-    for entity in entities:
-        if "dbpedia" in entity["sources"] and "types" in entity["sources"]["dbpedia"]:
-            for dtype in entity["sources"]["dbpedia"]["types"]:
-                dbpedia_types[dtype] = dbpedia_types.get(dtype, 0) + 1
-    
-    # Sortiere nach Häufigkeit
-    sorted_dbpedia_types = sorted(dbpedia_types.items(), key=lambda x: x[1], reverse=True)
-    for dtype, count in sorted_dbpedia_types[:10]:  # Top 10 anzeigen
-        if count > 1:  # Nur Typen anzeigen, die mehr als einmal vorkommen
-            print(f"  {dtype}: {count}")
-    
-    # Entitäten gruppieren nach gemeinsamen Typen
-    print("\nEntitäten-Cluster nach gemeinsamen Typen:")
-    
-    # Wikidata-Cluster
-    wikidata_clusters = {}
-    for entity in entities:
-        if "wikidata" in entity["sources"] and "types" in entity["sources"]["wikidata"]:
-            for wtype in entity["sources"]["wikidata"]["types"]:
-                if wikidata_types.get(wtype, 0) > 1:  # Nur Typen berücksichtigen, die mehr als einmal vorkommen
-                    if wtype not in wikidata_clusters:
-                        wikidata_clusters[wtype] = []
-                    wikidata_clusters[wtype].append(entity["entity"])
-    
-    # Top 5 Wikidata-Cluster anzeigen
-    print("\nWikidata-Cluster (Top 5):")
-    top_clusters = sorted(wikidata_clusters.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-    for wtype, entities_list in top_clusters:
-        print(f"  {wtype} ({len(entities_list)} Entitäten): {', '.join(entities_list)}")
-    
-    # DBpedia-Cluster
-    dbpedia_clusters = {}
-    for entity in entities:
-        if "dbpedia" in entity["sources"] and "types" in entity["sources"]["dbpedia"]:
-            for dtype in entity["sources"]["dbpedia"]["types"]:
-                if dbpedia_types.get(dtype, 0) > 1:  # Nur Typen berücksichtigen, die mehr als einmal vorkommen
-                    if dtype not in dbpedia_clusters:
-                        dbpedia_clusters[dtype] = []
-                    dbpedia_clusters[dtype].append(entity["entity"])
-    
-    # Top 5 DBpedia-Cluster anzeigen
-    print("\nDBpedia-Cluster (Top 5):")
-    top_clusters = sorted(dbpedia_clusters.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-    for dtype, entities_list in top_clusters:
-        print(f"  {dtype} ({len(entities_list)} Entitäten): {', '.join(entities_list)}")
+    # Statistiken anzeigen (aus JSON-Ergebnis)
+    stats = result.get("statistics", {})
+    print("\nStatistiken:")
+    # Gesamt
+    print(f"  Gesamtentitäten: {stats.get('total_entities', 0)}")
 
-    # Analyse gemeinsamer Wikipedia-Kategorien (Top 5)
-    wiki_cat_entities = {}
-    for ent in entities:
-        cats = ent.get("sources", {}).get("wikipedia", {}).get("categories", [])
-        for cat in cats:
-            wiki_cat_entities.setdefault(cat, []).append(ent.get("entity", ent.get("name", "")))
-    sorted_wiki_cats = sorted(wiki_cat_entities.items(), key=lambda x: len(x[1]), reverse=True)[:5]
-    print("\nWikipedia-Kategorien mit den meisten Überschneidungen (Top 5):")
-    for cat, names in sorted_wiki_cats:
-        if len(names) > 1:
-            print(f"  {cat} ({len(names)} Entitäten): {', '.join(names)}")
+    # Typverteilung
+    print("\n  Typverteilung:")
+    for typ, count in stats.get('types_distribution', {}).items():
+        print(f"    {typ}: {count}")
 
-    logging.info("Final results have been outputted")
+    # Linking-Erfolg
+    print("\n  Linking-Erfolg:")
+    for source, data in stats.get('linked', {}).items():
+        print(f"    {source.capitalize()}: {data['count']} ({data['percent']:.1f}%)")
+
+    # Top Wikipedia Kategorien
+    print("\n  Top 10 Wikipedia-Kategorien:")
+    for c in stats.get('top_wikipedia_categories', []):
+        print(f"    {c['category']}: {c['count']}")
+
+    # Top Wikidata Typen
+    print("\n  Top 10 Wikidata-Typen:")
+    for t in stats.get('top_wikidata_types', []):
+        print(f"    {t['type']}: {t['count']}")
+
+    # Entitätsverbindungen
+    print("\n  Entitätsverbindungen (Top 10):")
+    for ec in stats.get('entity_connections', [])[:10]:
+        print(f"    {ec['entity']}: {ec['count']}")
+
+    # Top Wikidata part_of
+    print("\n  Top 10 Wikidata 'part_of':")
+    for po in stats.get('top_wikidata_part_of', []):
+        print(f"    {po['part_of']}: {po['count']}")
+
+    # Top Wikidata has_parts
+    print("\n  Top 10 Wikidata 'has_parts':")
+    for hp in stats.get('top_wikidata_has_parts', []):
+        print(f"    {hp['has_parts']}: {hp['count']}")
+
+    # Top DBpedia part_of
+    print("\n  Top 10 DBpedia 'part_of':")
+    for po in stats.get('top_dbpedia_part_of', []):
+        print(f"    {po['part_of']}: {po['count']}")
+
+    # Top DBpedia has_parts
+    print("\n  Top 10 DBpedia 'has_parts':")
+    for hp in stats.get('top_dbpedia_has_parts', []):
+        print(f"    {hp['has_parts']}: {hp['count']}")
+
+    # Top 10 DBpedia-Subjects
+    print("\n  Top 10 DBpedia-Subjects:")
+    for sub in stats.get('top_dbpedia_subjects', []):
+        print(f"    {sub['subject']}: {sub['count']}")
+
+    logging.info("Final results have been outputted.")
 
 if __name__ == "__main__":
     main()

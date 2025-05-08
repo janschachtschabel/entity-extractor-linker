@@ -23,8 +23,8 @@ entities = process_entities(
 
         # === Data Source Parameters ===
         "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-        "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
-        "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
+        "USE_WIKIDATA": True,     # Wikidata-Verknüpfung aktivieren
+        "USE_DBPEDIA": True,      # DBpedia-Verknüpfung aktivieren
         "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
         "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
         "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
@@ -37,7 +37,6 @@ entities = process_entities(
         "ALLOWED_ENTITY_TYPES": "auto", # Entitätstypen automatisch filtern
         "MODE": "extract",         # Modus (extract, generate, compendium)
         "LANGUAGE": "en",          # Sprache (de, en)
-        "SHOW_STATUS": True,       # Statusmeldungen anzeigen
         "ENABLE_ENTITY_INFERENCE": False, # Entity-Inferenz aktivieren
 
         # === RELATION PARAMETERS ===
@@ -45,6 +44,7 @@ entities = process_entities(
         "ENABLE_RELATIONS_INFERENCE": False,  # Implizite Relationen aktivieren
 
         # === OTHER SETTINGS ===
+        "SHOW_STATUS": True,       # Statusmeldungen anzeigen
         "SUPPRESS_TLS_WARNINGS": True, # TLS-Warnungen unterdrücken
         "COLLECT_TRAINING_DATA": False, # Trainingsdaten sammeln
 

@@ -138,3 +138,49 @@ if relationships:
     print(f"Insgesamt {len(implicit)} implizite Beziehungen gefunden.")
 else:
     print("Keine Beziehungen gefunden.")
+
+# Statistiken anzeigen (aus JSON-Ergebnis)
+stats = result.get("statistics", {})
+print("\nStatistiken:")
+# Gesamt
+print(f"  Gesamtentitäten: {stats.get('total_entities', 0)}")
+# Typverteilung
+print("\n  Typverteilung:")
+for typ, count in stats.get('types_distribution', {}).items():
+    print(f"    {typ}: {count}")
+# Linking-Erfolg
+print("\n  Linking-Erfolg:")
+for source, data in stats.get('linked', {}).items():
+    print(f"    {source.capitalize()}: {data['count']} ({data['percent']:.1f}%)")
+# Top Wikipedia Kategorien
+print("\n  Top 10 Wikipedia-Kategorien:")
+for c in stats.get('top_wikipedia_categories', []):
+    print(f"    {c['category']}: {c['count']}")
+# Top Wikidata Typen
+print("\n  Top 10 Wikidata-Typen:")
+for t in stats.get('top_wikidata_types', []):
+    print(f"    {t['type']}: {t['count']}")
+# Entitätsverbindungen
+print("\n  Entitätsverbindungen (Top 10):")
+for ec in stats.get('entity_connections', [])[:10]:
+    print(f"    {ec['entity']}: {ec['count']}")
+# Top Wikidata part_of
+print("\n  Top 10 Wikidata 'part_of':")
+for po in stats.get('top_wikidata_part_of', []):
+    print(f"    {po['part_of']}: {po['count']}")
+# Top Wikidata has_parts
+print("\n  Top 10 Wikidata 'has_parts':")
+for hp in stats.get('top_wikidata_has_parts', []):
+    print(f"    {hp['has_parts']}: {hp['count']}")
+# Top DBpedia part_of
+print("\n  Top 10 DBpedia 'part_of':")
+for po in stats.get('top_dbpedia_part_of', []):
+    print(f"    {po['part_of']}: {po['count']}")
+# Top DBpedia has_parts
+print("\n  Top 10 DBpedia 'has_parts':")
+for hp in stats.get('top_dbpedia_has_parts', []):
+    print(f"    {hp['has_parts']}: {hp['count']}")
+# Top 10 DBpedia-Subjects
+print("\n  Top 10 DBpedia-Subjects:")
+for sub in stats.get('top_dbpedia_subjects', []):
+    print(f"    {sub['subject']}: {sub['count']}")
