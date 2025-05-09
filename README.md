@@ -175,9 +175,10 @@ print(json.dumps(result, ensure_ascii=False, indent=2))
 │   │   └── semantic_dedup_utils.py
 │   ├── prompts/                      # Prompt-Definitionen
 │   │   ├── __init__.py
-│   │   ├── extract_prompts.py
-│   │   ├── entity_inference_prompts.py
+│   │   ├── compendium_prompts.py
 │   │   ├── deduplication_prompts.py
+│   │   ├── entity_inference_prompts.py
+│   │   ├── extract_prompts.py
 │   │   ├── generation_prompts.py
 │   │   └── relationship_prompts.py
 │   ├── services/                     # Externe Dienste (OpenAI, Wikipedia, Wikidata, DBpedia)
@@ -216,7 +217,7 @@ print(json.dumps(result, ensure_ascii=False, indent=2))
 
 ## Pipeline-Übersicht
 
-1. Entitätserkennung (Extract / Generate / Compendium)
+1. Entitätserkennung (Extract / Generate)
 2. Entitätsverlinkung (Wikipedia, Wikidata, DBpedia mit Fallback-Strategien)
 3. Relationsextraktion und -inferenz (Tripelbildung explizit/implizit)
 4. Knowledge Graph Completion & Visualisierung (PNG & interaktive HTML)
