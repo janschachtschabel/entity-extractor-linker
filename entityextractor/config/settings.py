@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "TEXT_CHUNK_OVERLAP": 50,   # Überlappung zwischen Chunks in Zeichen
 
     # === ENTITY EXTRACTION SETTINGS ===
-    "MODE": "extract",               # Modus: extract, generate, compendium
+    "MODE": "extract",               # Modus: extract oder generate
     "MAX_ENTITIES": 15,              # Maximale Anzahl extrahierter Entitäten
     "ALLOWED_ENTITY_TYPES": "auto",  # Automatische Filterung erlaubter Entitätstypen
     "ENABLE_ENTITY_INFERENCE": False, # Implizite Entitätserkennung aktivieren
@@ -49,6 +49,11 @@ DEFAULT_CONFIG = {
     "DBPEDIA_LOOKUP_MAX_HITS": 5,     # Maximale Trefferzahl für Lookup-API
     "DBPEDIA_LOOKUP_CLASS": None,     # Optionale DBpedia-Ontology-Klasse für Lookup-API (derzeit ungenutzt)
     "DBPEDIA_LOOKUP_FORMAT": "xml",   # Response-Format: "json", "xml" (empfohlen) oder "beide" (maximale Details)
+
+    # === COMPENDIUM SETTINGS ===
+    "ENABLE_COMPENDIUM": False,           # Kompendium-Generierung aktivieren
+    "COMPENDIUM_LENGTH": 8000,            # Anzahl der Zeichen für das Kompendium (ca. 4 A4-Seiten)
+    "COMPENDIUM_EDUCATIONAL_MODE": False,  # Bildungsmodus für Kompendium aktivieren
 
     # === KNOWLEDGE GRAPH VISUALIZATION SETTINGS ===
     "ENABLE_GRAPH_VISUALIZATION": False,  # Statische PNG- und interaktive HTML-Ansicht aktivieren (erfordert RELATION_EXTRACTION=True)

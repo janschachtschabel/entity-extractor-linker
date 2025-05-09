@@ -7,7 +7,7 @@ MODE=generate, nur Wikipedia-Integration, MAX_ENTITIES=10.
 """
 
 from entityextractor.core.api import process_entities
-import json, logging, sys
+import json, logging, sys, os
 
 sys.stdout.reconfigure(encoding='utf-8')
 logging.basicConfig(level=logging.INFO)
@@ -17,51 +17,94 @@ Auf gesellschaftlicher Ebene fördert die Bundesregierung über Programme wie de
 Im internationalen Kontext kooperiert Deutschland im Rahmen der EU-Klimapolitik und globaler Klimaabkommen wie dem Pariser Abkommen, um verbindliche Emissionssenkungen zu vereinbaren. Technologietransfer und gemeinsame Forschungsprojekte mit Partnern in Nordamerika, Asien und Afrika fördern den weltweiten Ausbau sauberer Energien. Die Rolle von grünem Wasserstoff als Energiespeicher und Transformationsmedium gewinnt zunehmend an Bedeutung, da er in der Industrie und im Schwerlastverkehr fossile Brennstoffe ersetzen kann. Pilotprojekte in Schleswig-Holstein und Bayern untersuchen die Machbarkeit von Sektorenkopplung mit Wasserstoffspeichern. Langfristig zielt die Bundesrepublik darauf ab, eine klimaneutrale Wirtschaft zu erreichen und gleichzeitig die wirtschaftliche Wettbewerbsfähigkeit zu erhalten. Die Herausforderung liegt darin, technologische, regulatorische und soziale Aspekte in Einklang zu bringen, um das Ziel einer nachhaltigen Energieversorgung zu realisieren."""
 
 config = {
-    # === LLM Provider Parameters ===
-    "LLM_BASE_URL": "https://api.openai.com/v1",  # Base URL für LLM API
-    "MODEL": "gpt-4.1-mini",   # LLM-Modell
-    "OPENAI_API_KEY": None,    # API-Key aus Umgebungsvariable
-    "MAX_TOKENS": 16000,       # Maximale Tokenanzahl pro Anfrage
-    "TEMPERATURE": 0.2,        # Sampling-Temperature
+    # === LLM PROVIDER SETTINGS ===
+    "LLM_BASE_URL": "https://api.openai.com/v1",  # Base-URL für LLM API
+    "MODEL": "gpt-4.1-mini",                      # LLM-Modell (empfohlen: gpt-4.1-mini, gpt-4o-mini)
+    "OPENAI_API_KEY": None,                       # API-Key aus Umgebungsvariable
+    "MAX_TOKENS": 16000,                          # Maximale Tokenanzahl pro Anfrage
+    "TEMPERATURE": 0.2,                           # Sampling-Temperatur
 
-    # === Data Source Parameters ===
-    "USE_WIKIPEDIA": True,     # Wikipedia-Verknüpfung aktivieren
-    "USE_WIKIDATA": False,     # Wikidata-Verknüpfung aktivieren
-    "USE_DBPEDIA": False,      # DBpedia-Verknüpfung aktivieren
-    "DBPEDIA_USE_DE": False,   # Deutsche DBpedia nutzen
-    "DBPEDIA_LOOKUP_API": True, # DBPedia Lookup API als Backup bei Verbindungsproblemen mit den Endpunkten
-    "DBPEDIA_SKIP_SPARQL": False, # Skip DBPedia SPARQL
-    "DBPEDIA_LOOKUP_FORMAT": "xml", # xml, json oder both
-    "ADDITIONAL_DETAILS": False,  # Abruf zusätzlicher Details aus den Wissensquellen aktivieren
-    "TIMEOUT_THIRD_PARTY": 20,  # HTTP-Timeout für Drittanbieter
+    # === LANGUAGE SETTINGS ===
+    "LANGUAGE": "de",                             # Sprache der Verarbeitung (de oder en)
 
-    # === Entity Extraction Parameters ===
-    "MAX_ENTITIES": 15,        # Max. Anzahl Entitäten
-    "ALLOWED_ENTITY_TYPES": "auto", # Entitätstypen automatisch filtern
-    "MODE": "extract",         # Modus: extrahieren
-    "LANGUAGE": "de",          # Sprache
-    "SHOW_STATUS": True,       # Statusmeldungen anzeigen
-    "ENABLE_ENTITY_INFERENCE": False, # Entity-Inferenz aktivieren
+    # === TEXT PROCESSING SETTINGS ===
+    "TEXT_CHUNKING": True,                         # Text-Chunking aktivieren (False = ein LLM-Durchgang)
+    "TEXT_CHUNK_SIZE": 2000,                       # Chunk-Größe in Zeichen
+    "TEXT_CHUNK_OVERLAP": 50,                      # Überlappung zwischen Chunks in Zeichen
 
-    # === RELATION PARAMETERS ===
-    "RELATION_EXTRACTION": True, # Relationsextraktion aktivieren
-    "ENABLE_RELATIONS_INFERENCE": False, # Implizite Relationen aktivieren
+    # === ENTITY EXTRACTION SETTINGS ===
+    "MODE": "extract",                           # Modus: extract oder generate
+    "MAX_ENTITIES": 15,                            # Maximale Anzahl extrahierter Entitäten
+    "ALLOWED_ENTITY_TYPES": "auto",              # Automatische Filterung erlaubter Entitätstypen
+    "ENABLE_ENTITY_INFERENCE": False,              # Implizite Entitätserkennung aktivieren
 
-    # === OTHER SETTINGS ===
-    "SUPPRESS_TLS_WARNINGS": True, # TLS-Warnungen unterdrücken
-    "COLLECT_TRAINING_DATA": False, # Trainingsdaten sammeln
+    # === RELATIONSHIP EXTRACTION AND INFERENCE ===
+    "RELATION_EXTRACTION": True,                   # Relationsextraktion aktivieren
+    "ENABLE_RELATIONS_INFERENCE": False,           # Implizite Relationen aktivieren
+    "MAX_RELATIONS": 15,                           # Maximale Anzahl Beziehungen pro Prompt
 
-    # === TEXT CHUNKING FÜR LANGE TEXTE ===
-    "TEXT_CHUNKING": True,    # Text-Chunking aktivieren
-    "TEXT_CHUNK_SIZE": 2000,   # Chunk-Größe
-    "TEXT_CHUNK_OVERLAP": 50,  # Chunk-Überlappung
+    # === CORE DATA SOURCE SETTINGS ===
+    "USE_WIKIPEDIA": True,                        # Wikipedia-Verknüpfung aktivieren (immer True)
+    "USE_WIKIDATA": False,                        # Wikidata-Verknüpfung aktivieren
+    "USE_DBPEDIA": False,                         # DBpedia-Verknüpfung aktivieren
+    "DBPEDIA_USE_DE": False,                      # Deutsche DBpedia nutzen (Standard: False = englische DBpedia)
+    "ADDITIONAL_DETAILS": False,                  # Zusätzliche Details aus allen Wissensquellen abrufen
 
-    # === KNOWLEDGE GRAPH COMPLETION ===
-    "ENABLE_KGC": True,       # Knowledge Graph Completion aktivieren
-    "KGC_ROUNDS": 3,           # Anzahl KGC-Runden
+    # === DBpedia Lookup API Fallback ===
+    "DBPEDIA_LOOKUP_API": True,                   # Fallback via DBpedia Lookup API aktivieren
+    "DBPEDIA_SKIP_SPARQL": False,                 # SPARQL-Abfragen überspringen und nur Lookup-API verwenden
+    "DBPEDIA_LOOKUP_MAX_HITS": 5,                 # Maximale Trefferzahl für Lookup-API
+    "DBPEDIA_LOOKUP_CLASS": None,                 # Optionale DBpedia-Ontology-Klasse für Lookup-API
+    "DBPEDIA_LOOKUP_FORMAT": "xml",             # Response-Format: "json", "xml" oder "beide"
 
-    # === GRAPH-VISUALISIERUNG ===
-    "ENABLE_GRAPH_VISUALIZATION": True    # Graph-Visualisierung aktivieren
+    # === COMPENDIUM SETTINGS ===
+    "ENABLE_COMPENDIUM": False,                   # Kompendium-Generierung aktivieren
+    "COMPENDIUM_LENGTH": 8000,                    # Anzahl der Zeichen für das Kompendium (ca. 4 A4-Seiten)
+    "COMPENDIUM_EDUCATIONAL_MODE": False,         # Bildungsmodus für Kompendium aktivieren
+
+    # === KNOWLEDGE GRAPH VISUALIZATION SETTINGS ===
+    "ENABLE_GRAPH_VISUALIZATION": True,           # Statische PNG- und interaktive HTML-Ansicht aktivieren
+
+    # === KNOWLEDGE GRAPH COMPLETION (KGC) ===
+    "ENABLE_KGC": True,                           # Knowledge-Graph-Completion aktivieren
+    "KGC_ROUNDS": 3,                              # Anzahl der KGC-Runden
+
+    # === STATISCHER GRAPH mit NetworkX-Layouts (PNG) ===
+    "GRAPH_LAYOUT_METHOD": "spring",             # Layoutmethode für statisches PNG: "spring" oder "kamada_kawai"
+    "GRAPH_LAYOUT_K": None,                       # Ideale Kantenlänge im Spring-Layout (None=Standard)
+    "GRAPH_LAYOUT_ITERATIONS": 50,                # Iterationen für Spring-Layout
+    "GRAPH_PHYSICS_PREVENT_OVERLAP": True,        # Überlappungsprävention im Spring-Layout aktivieren
+    "GRAPH_PHYSICS_PREVENT_OVERLAP_DISTANCE": 0.1,# Mindestabstand zwischen Knoten
+    "GRAPH_PHYSICS_PREVENT_OVERLAP_ITERATIONS": 50,# Iterationen zur Überlappungsprävention
+    "GRAPH_PNG_SCALE": 0.30,                      # Skalierungsfaktor für das statische PNG-Layout (Standard 0.33)
+
+    # === INTERAKTIVER GRAPH mit PyVis (HTML) ===
+    "GRAPH_HTML_INITIAL_SCALE": 10,               # Anfangs-Zoom im interaktiven HTML-Graph
+
+    # === TRAINING DATA COLLECTION SETTINGS ===
+    "COLLECT_TRAINING_DATA": False,               # Trainingsdaten für Fine-Tuning sammeln
+    "OPENAI_TRAINING_DATA_PATH": "entity_extractor_training_openai.jsonl",  # Pfad für Entitäts-Trainingsdaten
+    "OPENAI_RELATIONSHIP_TRAINING_DATA_PATH": "entity_relationship_training_openai.jsonl",  # Pfad für Beziehungs-Trainingsdaten
+
+    # === RATE LIMITER AND TIMEOUT SETTINGS ===
+    "TIMEOUT_THIRD_PARTY": 20,                    # Timeout für externe Dienste (Sekunden)
+    "RATE_LIMIT_MAX_CALLS": 3,                    # Maximale Anzahl Aufrufe pro Zeitraum
+    "RATE_LIMIT_PERIOD": 1,                       # Zeitraum (Sekunden) für das Rate-Limiter-Fenster
+    "RATE_LIMIT_BACKOFF_BASE": 1,                 # Basiswert für exponentielles Backoff bei HTTP 429
+    "RATE_LIMIT_BACKOFF_MAX": 60,                 # Maximale Backoff-Dauer (Sekunden) bei HTTP 429
+    "USER_AGENT": "EntityExtractor/1.0",        # HTTP User-Agent-Header für alle API-Anfragen
+    "WIKIPEDIA_MAXLAG": 5,                       # Maxlag-Parameter für Wikipedia-API-Anfragen
+
+    # === CACHING SETTINGS ===
+    "CACHE_ENABLED": True,                        # Caching global aktivieren oder deaktivieren
+    "CACHE_DIR": os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache"),  # Verzeichnis für Cache-Dateien
+    "CACHE_DBPEDIA_ENABLED": True,                # Caching für DBpedia-SPARQL-Abfragen aktivieren
+    "CACHE_WIKIDATA_ENABLED": True,               # Caching für Wikidata-API aktivieren
+    "CACHE_WIKIPEDIA_ENABLED": True,              # Caching für Wikipedia-API-Anfragen aktivieren
+
+    # === LOGGING AND DEBUG SETTINGS ===
+    "SHOW_STATUS": True,                          # Statusmeldungen anzeigen
+    "SUPPRESS_TLS_WARNINGS": True                 # TLS-Warnungen unterdrücken
 }
 
 result = process_entities(text, config)
